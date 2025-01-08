@@ -1,58 +1,13 @@
 import numpy as np
-from stable_baselines.common.env_checker import check_env
 import gym
 from gym import spaces
-
+import torch
+from gait_generator_net import SimpleFCNN
 x_init = [0,1.1,]
-def y_g(xrl, rampAngle):
-    """
-    Ground pattern function.
-    
-    Parameters:
-        xrl: Input value (e.g., distance or position).
-        rampAngle: Angle of the ramp in degrees.
-    
-    Returns:
-        output: The calculated ground pattern value.
-    """
-    # Calculate the ground pattern value
-    output = np.sin(np.pi * rampAngle / 180) * xrl
-    return output
 
-def h(input):
-    if input > 0:
-        return 1
-    else:
-        return 0    
-
-import gym
-from gym import spaces
-
-def biped_reward(x, dx, t,torques, ramp_angle, reference=None):
-    pos_weight = 0.5
-    fall_weight = 10
-    torque_weight = 0.1
-    # Define the reward function
-    refrence_move = reference[t]
-    pos_diff = np.sum(np.linalg.norm(x[4,11,7,13] - refrence_move))
-    pos_reward = np.exp(-pos_weight*pos_diff)
-    if x[2] < 0.5:
-        fall_reward = np.exp(-fall_weight*(1.1-x[2]))
-    else:
-        fall_reward = 0
-    torque_reward = np.exp(-torque_weight*np.sum(torques**2))
-    reward = pos_reward + fall_reward + torque_reward
-    return reward
-
-
-
-    return None
-class CustomEnv(gym.Env):
-    """Custom Environment that follows gym interface"""
-    metadata = {'render.modes': ['human']}
-
-    def __init__(self):
-        super(CustomEnv, self).__init__()
+class BipedEnv(gym.Env):
+    def __init__(self,render=False, render_mode= None):
+        super(BipedEnv, self).__init__()
         self.M = 48
         self.m_1 = 7
         self.m_2 = 4
@@ -67,25 +22,99 @@ class CustomEnv(gym.Env):
         self.k_g = 10000
         self.l_1_2 = self.l_1 / 2
         self.l_2_2 = self.l_2 / 2
+        self.ramp_angle = 0
+        self.roughness_multiplier = 0
 
         self.I_1 =self.m_1 * self.l_1**2 / 12
         self.I_2 = self.m_2 * self.l_2**2 / 12
         self.MInv = 1 / self.M
         self.m_1Inv = 1 / self.m_1
         self.m_2Inv = 1 / self.m_2
-
-        self.action_space = spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)
+        self.max_steps = 500
+        self.action_space = spaces.Box(low=-20, high=20, shape=(6,), dtype=np.float32)
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(28,), dtype=np.float32)
         self.t = 0
+        self.dt = 0.01
+        self.gaitgen_net = SimpleFCNN()
+        self.gaitgen_net.load_state_dict(torch.load('model_hs512_lpmse_bs64_epoch1000_fft.pth'))
+        self.norm_consts = np.load(rf"gait reference fft_25_4.88\normalization_constants.npy")
+        #x,dx are the states
+        #torques are the actions
 
-    def step(self,torques,x,dx,dt,ramp_angle,rough_terrain_array,reference=None):
+    def reset(self):
+        # Reset the state of the environment to an initial state
+        self.t = 0
+        selected_speed = np.random.rand*3
+        self.reference_speed = selected_speed
+        self.ramp_angle = 0
+        self.rough_terrain_array = np.random.rand(500)*self.roughness_multiplier
+        right_len = self.l1 + self.l_2
+        left_len = self.l1 + self.l_2
+        encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
+        encoder_vec[0] = selected_speed/3
+        encoder_vec[1] = right_len
+        encoder_vec[2] = left_len
+        encoder_vec = torch.from_numpy(encoder_vec)
+        self.reference = self.findgait(encoder_vec)
+        self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)
+        self.reference = np.pi/2 - self.reference
+        self.state_x = np.array([0, 1.1, 0, self.l2+self.l_1_2, np.pi/2, 0, self.l2+self.l_1_2, np.pi/2, 0, self.l_2_2, np.pi/2, 0, self.l_2_2, np.pi/2])
+        self.state_dx = np.zeros(14)
+        self.state = np.concatenate([self.state_x, self.state_dx])
+        return self.state
+
+    def findgait(self,input):
+
+        freqs = self.gaitgen_net(input)
+        predictions = freqs.reshape(-1,2,25,4)
+        predictions = predictions.detach().numpy()
+        predictions = predictions[0]
+        predictions = self.denormalize(predictions)
+        pred_time = self.pred_ifft(predictions)
+
+        return pred_time
+
+    def denormalize(self,pred):
+
+        pred[0,:,0] = pred[0,:,0] * self.normalizationconst[0]
+        pred[0,:,1] = pred[0,:,1] * self.normalizationconst[1]
+        pred[0,:,2] = pred[0,:,2] * self.normalizationconst[2]
+        pred[0,:,3] = pred[0,:,3] * self.normalizationconst[3]
+        pred[1,:,0] = pred[1,:,0] * self.normalizationconst[4]
+        pred[1,:,1] = pred[1,:,1] * self.normalizationconst[5]
+        pred[1,:,2] = pred[1,:,2] * self.normalizationconst[6]
+        pred[1,:,3] = pred[1,:,3] * self.normalizationconst[7]
+        
+        return pred
+        
+
+    def pred_ifft(self,predictions):
+
+        real_pred = predictions[0,:,:]
+        imag_pred = predictions[0,:,:]
+        predictions = real_pred + 1j*imag_pred
+
+        padded_pred = np.zeros((257,4),dtype=complex)
+        padded_pred[:25,:] = predictions
+
+        padded_time = np.fft.irfft(padded_pred, axis=0)
+        pred_time = padded_time[56:-56,:]
+
+        return pred_time
+
+    def step(self,torques):
+        x = self.state[:14]
+        dx = self.state[14:]
         self.t += 1
         sin_x5  =np.sin(x[4])
         cos_x5  =np.cos(x[4])
+
         sin_x8  =np.sin(x[7])
         cos_x8  =np.cos(x[7])
+
         sin_x11 =np.sin(x[10])
         cos_x11 =np.cos(x[10])
+
         sin_x14 =np.sin(x[13])
         cos_x14 =np.cos(x[13])
 
@@ -105,7 +134,6 @@ class CustomEnv(gym.Env):
         l_2_2_cos_x11_I_2=-l_2_2_cos_x11/self.I_2
         l_2_2_sin_x14_I_2=-l_2_2_sin_x14/self.I_2
         l_2_2_cos_x14_I_2=-l_2_2_cos_x14/self.I_2
-
 
         P_x = np.array([
             [self.MInv, 0, self.MInv, 0, 0, 0, 0, 0],
@@ -137,7 +165,7 @@ class CustomEnv(gym.Env):
 
         x_r = x[8] + l_2_2_cos_x11
         y_r = x[9] - l_2_2_sin_x11
-        y_g_x_r = y_g(x_r, ramp_angle) + rough_terrain_array(int(x_r)*10)
+        y_g_x_r = self.y_g(x_r, self.ramp_angle) + self.rough_terrain_array(int(x_r)*10)
 
         if (y_r - y_g_x_r) < 0:
             y_d = y_g_x_r - y_r
@@ -150,7 +178,7 @@ class CustomEnv(gym.Env):
 
         x_l = x[11] + l_2_2_cos_x14
         y_l = x[12] - l_2_2_sin_x14
-        y_g_x_l = y_g(x_l, ramp_angle) + rough_terrain_array(int(x_l)*10)
+        y_g_x_l = self.y_g(x_l, self.ramp_angle) + self.rough_terrain_array(int(x_l)*10)
 
         if (y_l - y_g_x_l) < 0:
             y_d = y_g_x_l - y_l
@@ -164,15 +192,15 @@ class CustomEnv(gym.Env):
         f_x5_x11 = max(0, x[4] - x[10])
         f_x8_x14 = max(0, x[7] - x[13])
 
-        h_x5_x11 = h(x[4] - x[10])
-        h_x8_x14 = h(x[7] - x[13])
+        h_x5_x11 = self.h(x[4] - x[10])
+        h_x8_x14 = self.h(x[7] - x[13])
 
         T_r1_y = torques[0]
         T_r2_y = torques[1]
         T_r3_y = torques[2]
         T_r4_y = torques[3]
-        h_F_g_2 = h(F_g_2)
-        h_F_g_4 = h(F_g_4)
+        h_F_g_2 = self.h(F_g_2)
+        h_F_g_4 = self.h(F_g_4)
 
         T_r5_x_dx_y = torques[4] * h_F_g_2
         T_r6_x_dx_y = torques[5] * h_F_g_4
@@ -216,16 +244,60 @@ class CustomEnv(gym.Env):
         ])
 
         d2x = P_x *((C_x * P_x ) /(D_x_dx - C_x * Q_x_dx_y_F_g)) + Q_x_dx_y_F_g
-        dx = dx + dt * d2x
-        x = x + dt * dx
+        dx = dx + self.dt * d2x
+        x = x + self.dt * dx
+        self.state[:14] = x
+        self.state[14:] = dx
+        #force = np.array([F_g_1, F_g_2, F_g_3, F_g_4])
 
-        force = np.array([F_g_1, F_g_2, F_g_3, F_g_4])
-
-        obs = np.concatenate([x,dx])
-        reward = biped_reward(x, dx, self.t-1,torques, ramp_angle, reference)
-        done = False
+        reward, done = self.biped_reward(self.state[:14], self.state[14:], self.t-1,torques, self.reference)
         info = {}
-        return obs, reward, done, info
+        return self.state, reward, done, info
+
+
+    def close(self):
+        pass
+
+    def y_g(self,xrl, rampAngle):
+        """
+        Ground pattern function.
+        
+        Parameters:
+            xrl: Input value (e.g., distance or position).
+            rampAngle: Angle of the ramp in degrees.
+        
+        Returns:
+            output: The calculated ground pattern value.
+        """
+        # Calculate the ground pattern value
+        output = np.sin(np.pi * rampAngle / 180) * xrl
+        return output
+
+    def h(self,input):
+        if input > 0:
+            return 1
+        else:
+            return 0    
+
+
+    def biped_reward(self,x, dx, t,torques):
+        done = False
+        reward = 0
+        pos_weight = 0.5
+        torque_weight = 0.1
+        # Define the reward function
+        reference_move = self.reference[t]
+        pos_diff = np.sum(np.linalg.norm(x[4,11,7,13] - reference_move))
+        reward -= pos_weight * pos_diff
+        if x[2] < 0.5:
+            reward -= 10
+            done = True
+        reward -= torque_weight * np.sum(torques**2)
+
+        # include speed reward something like
+        reward -= np.abs(dx[0] - self.reference_speed)
+        return reward, done
+    
 
 #     # Define action and observation space
 #     # They must be gym.spaces objects
@@ -246,167 +318,167 @@ class CustomEnv(gym.Env):
 #   def close (self):
 #     ...
 
-def biped_plant_force_out_touch_sensitive_rough_terrain_env(dt, x, dx, torques, ramp_angle, rough_terrain_array):
-    M = 48
-    m_1 = 7
-    m_2 = 4
-    l_1 = 0.5
-    l_2 = 0.6
-    g = 9.8
-    b_1 = 10
-    b_2 = 10
-    b_k = 1000
-    b_g = 1000
-    k_k = 10000
-    k_g = 10000
-    l_1_2 = l_1 / 2
-    l_2_2 = l_2 / 2
+# def biped_plant_force_out_touch_sensitive_rough_terrain_env(dt, x, dx, torques, ramp_angle, rough_terrain_array):
+#     M = 48
+#     m_1 = 7
+#     m_2 = 4
+#     l_1 = 0.5
+#     l_2 = 0.6
+#     g = 9.8
+#     b_1 = 10
+#     b_2 = 10
+#     b_k = 1000
+#     b_g = 1000
+#     k_k = 10000
+#     k_g = 10000
+#     l_1_2 = l_1 / 2
+#     l_2_2 = l_2 / 2
 
-    I_1 = m_1 * l_1**2 / 12
-    I_2 = m_2 * l_2**2 / 12
-    MInv = 1 / M
-    m_1Inv = 1 / m_1
-    m_2Inv = 1 / m_2
+#     I_1 = m_1 * l_1**2 / 12
+#     I_2 = m_2 * l_2**2 / 12
+#     MInv = 1 / M
+#     m_1Inv = 1 / m_1
+#     m_2Inv = 1 / m_2
 
-    sin_x5  =np.sin(x[4])
-    cos_x5  =np.cos(x[4])
-    sin_x8  =np.sin(x[7])
-    cos_x8  =np.cos(x[7])
-    sin_x11 =np.sin(x[10])
-    cos_x11 =np.cos(x[10])
-    sin_x14 =np.sin(x[13])
-    cos_x14 =np.cos(x[13])
+#     sin_x5  =np.sin(x[4])
+#     cos_x5  =np.cos(x[4])
+#     sin_x8  =np.sin(x[7])
+#     cos_x8  =np.cos(x[7])
+#     sin_x11 =np.sin(x[10])
+#     cos_x11 =np.cos(x[10])
+#     sin_x14 =np.sin(x[13])
+#     cos_x14 =np.cos(x[13])
 
-    l_1_2_sin_x5=l_1_2*sin_x5
-    l_1_2_cos_x5=l_1_2*cos_x5
-    l_1_2_sin_x8=l_1_2*sin_x8
-    l_1_2_cos_x8=l_1_2*cos_x8
-    l_2_2_sin_x11=l_2_2*sin_x11
-    l_2_2_cos_x11=l_2_2*cos_x11
-    l_2_2_sin_x14=l_2_2*sin_x14
-    l_2_2_cos_x14=l_2_2*cos_x14
-    l_1_2_sin_x5_I_1=-l_1_2_sin_x5/I_1
-    l_1_2_cos_x5_I_1=-l_1_2_cos_x5/I_1
-    l_1_2_sin_x8_I_1=-l_1_2_sin_x8/I_1
-    l_1_2_cos_x8_I_1=-l_1_2_cos_x8/I_1
-    l_2_2_sin_x11_I_2=-l_2_2_sin_x11/I_2
-    l_2_2_cos_x11_I_2=-l_2_2_cos_x11/I_2
-    l_2_2_sin_x14_I_2=-l_2_2_sin_x14/I_2
-    l_2_2_cos_x14_I_2=-l_2_2_cos_x14/I_2
+#     l_1_2_sin_x5=l_1_2*sin_x5
+#     l_1_2_cos_x5=l_1_2*cos_x5
+#     l_1_2_sin_x8=l_1_2*sin_x8
+#     l_1_2_cos_x8=l_1_2*cos_x8
+#     l_2_2_sin_x11=l_2_2*sin_x11
+#     l_2_2_cos_x11=l_2_2*cos_x11
+#     l_2_2_sin_x14=l_2_2*sin_x14
+#     l_2_2_cos_x14=l_2_2*cos_x14
+#     l_1_2_sin_x5_I_1=-l_1_2_sin_x5/I_1
+#     l_1_2_cos_x5_I_1=-l_1_2_cos_x5/I_1
+#     l_1_2_sin_x8_I_1=-l_1_2_sin_x8/I_1
+#     l_1_2_cos_x8_I_1=-l_1_2_cos_x8/I_1
+#     l_2_2_sin_x11_I_2=-l_2_2_sin_x11/I_2
+#     l_2_2_cos_x11_I_2=-l_2_2_cos_x11/I_2
+#     l_2_2_sin_x14_I_2=-l_2_2_sin_x14/I_2
+#     l_2_2_cos_x14_I_2=-l_2_2_cos_x14/I_2
 
 
-    P_x = np.array([
-        [MInv, 0, MInv, 0, 0, 0, 0, 0],
-        [0, MInv, 0, MInv, 0, 0, 0, 0],
-        [-m_1Inv, 0, 0, 0, m_1Inv, 0, 0, 0],
-        [0, -m_1Inv, 0, 0, 0, m_1Inv, 0, 0],
-        [l_1_2_sin_x5_I_1, l_1_2_cos_x5_I_1, 0, 0, l_1_2_sin_x5_I_1, l_1_2_cos_x5_I_1, 0, 0],
-        [0, 0, -m_1Inv, 0, 0, 0, m_1Inv, 0],
-        [0, 0, 0, -m_1Inv, 0, 0, 0, m_1Inv],
-        [0, 0, l_1_2_sin_x8_I_1, l_1_2_cos_x8_I_1, 0, 0, l_1_2_sin_x8_I_1, l_1_2_cos_x8_I_1],
-        [0, 0, 0, 0, -m_2Inv, 0, 0, 0],
-        [0, 0, 0, 0, 0, -m_2Inv, 0, 0],
-        [0, 0, 0, 0, l_2_2_sin_x11_I_2, l_2_2_cos_x11_I_2, 0, 0],
-        [0, 0, 0, 0, 0, 0, -m_2Inv, 0],
-        [0, 0, 0, 0, 0, 0, 0, -m_2Inv],
-        [0, 0, 0, 0, 0, 0, l_2_2_sin_x14_I_2, l_2_2_cos_x14_I_2]
-    ])
+#     P_x = np.array([
+#         [MInv, 0, MInv, 0, 0, 0, 0, 0],
+#         [0, MInv, 0, MInv, 0, 0, 0, 0],
+#         [-m_1Inv, 0, 0, 0, m_1Inv, 0, 0, 0],
+#         [0, -m_1Inv, 0, 0, 0, m_1Inv, 0, 0],
+#         [l_1_2_sin_x5_I_1, l_1_2_cos_x5_I_1, 0, 0, l_1_2_sin_x5_I_1, l_1_2_cos_x5_I_1, 0, 0],
+#         [0, 0, -m_1Inv, 0, 0, 0, m_1Inv, 0],
+#         [0, 0, 0, -m_1Inv, 0, 0, 0, m_1Inv],
+#         [0, 0, l_1_2_sin_x8_I_1, l_1_2_cos_x8_I_1, 0, 0, l_1_2_sin_x8_I_1, l_1_2_cos_x8_I_1],
+#         [0, 0, 0, 0, -m_2Inv, 0, 0, 0],
+#         [0, 0, 0, 0, 0, -m_2Inv, 0, 0],
+#         [0, 0, 0, 0, l_2_2_sin_x11_I_2, l_2_2_cos_x11_I_2, 0, 0],
+#         [0, 0, 0, 0, 0, 0, -m_2Inv, 0],
+#         [0, 0, 0, 0, 0, 0, 0, -m_2Inv],
+#         [0, 0, 0, 0, 0, 0, l_2_2_sin_x14_I_2, l_2_2_cos_x14_I_2]
+#     ])
 
-    C_x = np.array([
-        [1, 0, -1, 0, -l_1_2_sin_x5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, -1, -l_1_2_cos_x5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [1, 0, 0, 0, 0, -1, 0, -l_1_2_sin_x8, 0, 0, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, -1, -l_1_2_cos_x8, 0, 0, 0, 0, 0, 0],
-        [0, 0, 1, 0, -l_1_2_sin_x5, 0, 0, 0, -1, 0, -l_2_2_sin_x11, 0, 0, 0],
-        [0, 0, 0, 1, -l_1_2_cos_x5, 0, 0, 0, 0, -1, -l_2_2_cos_x11, 0, 0, 0],
-        [0, 0, 0, 0, 0, 1, 0, -l_1_2_sin_x8, 0, 0, 0, -1, 0, -l_2_2_sin_x14],
-        [0, 0, 0, 0, 0, 0, 1, -l_1_2_cos_x8, 0, 0, 0, 0, -1, -l_2_2_cos_x14]
-    ])
+#     C_x = np.array([
+#         [1, 0, -1, 0, -l_1_2_sin_x5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#         [0, 1, 0, -1, -l_1_2_cos_x5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#         [1, 0, 0, 0, 0, -1, 0, -l_1_2_sin_x8, 0, 0, 0, 0, 0, 0],
+#         [0, 1, 0, 0, 0, 0, -1, -l_1_2_cos_x8, 0, 0, 0, 0, 0, 0],
+#         [0, 0, 1, 0, -l_1_2_sin_x5, 0, 0, 0, -1, 0, -l_2_2_sin_x11, 0, 0, 0],
+#         [0, 0, 0, 1, -l_1_2_cos_x5, 0, 0, 0, 0, -1, -l_2_2_cos_x11, 0, 0, 0],
+#         [0, 0, 0, 0, 0, 1, 0, -l_1_2_sin_x8, 0, 0, 0, -1, 0, -l_2_2_sin_x14],
+#         [0, 0, 0, 0, 0, 0, 1, -l_1_2_cos_x8, 0, 0, 0, 0, -1, -l_2_2_cos_x14]
+#     ])
 
-    x_r = x[8] + l_2_2_cos_x11
-    y_r = x[9] - l_2_2_sin_x11
-    y_g_x_r = y_g(x_r, ramp_angle) + rough_terrain_array(int(x_r)*10)
+#     x_r = x[8] + l_2_2_cos_x11
+#     y_r = x[9] - l_2_2_sin_x11
+#     y_g_x_r = y_g(x_r, ramp_angle) + rough_terrain_array(int(x_r)*10)
 
-    if (y_r - y_g_x_r) < 0:
-        y_d = y_g_x_r - y_r
-        hh = y_d / np.sin(x[10])
-        x_d = min(l_2, hh) * np.cos(x[10])
-        F_g_1 = -k_g * x_d - b_g * (dx[9] - l_2_2_sin_x11 * dx[10])
-        F_g_2 = -k_g * (y_r - y_g_x_r) + b_g * np.max(-(dx[9] - l_2_2_cos_x11 * dx[10]),0)
-    else:
-        F_g_1, F_g_2 = 0, 0
+#     if (y_r - y_g_x_r) < 0:
+#         y_d = y_g_x_r - y_r
+#         hh = y_d / np.sin(x[10])
+#         x_d = min(l_2, hh) * np.cos(x[10])
+#         F_g_1 = -k_g * x_d - b_g * (dx[9] - l_2_2_sin_x11 * dx[10])
+#         F_g_2 = -k_g * (y_r - y_g_x_r) + b_g * np.max(-(dx[9] - l_2_2_cos_x11 * dx[10]),0)
+#     else:
+#         F_g_1, F_g_2 = 0, 0
 
-    x_l = x[11] + l_2_2_cos_x14
-    y_l = x[12] - l_2_2_sin_x14
-    y_g_x_l = y_g(x_l, ramp_angle) + rough_terrain_array(int(x_l)*10)
+#     x_l = x[11] + l_2_2_cos_x14
+#     y_l = x[12] - l_2_2_sin_x14
+#     y_g_x_l = y_g(x_l, ramp_angle) + rough_terrain_array(int(x_l)*10)
 
-    if (y_l - y_g_x_l) < 0:
-        y_d = y_g_x_l - y_l
-        hh = y_d / np.sin(x[13])
-        x_d = min(l_2, hh) * np.cos(x[13])
-        F_g_3 = -k_g * x_d - b_g * (dx[11] - l_2_2_sin_x14 * dx[13])
-        F_g_4 = -k_g * (y_l - y_g_x_l) + b_g * np.max(-(dx[13] - l_2_2_cos_x14 * dx[13]),0)
-    else:
-        F_g_3, F_g_4 = 0, 0
+#     if (y_l - y_g_x_l) < 0:
+#         y_d = y_g_x_l - y_l
+#         hh = y_d / np.sin(x[13])
+#         x_d = min(l_2, hh) * np.cos(x[13])
+#         F_g_3 = -k_g * x_d - b_g * (dx[11] - l_2_2_sin_x14 * dx[13])
+#         F_g_4 = -k_g * (y_l - y_g_x_l) + b_g * np.max(-(dx[13] - l_2_2_cos_x14 * dx[13]),0)
+#     else:
+#         F_g_3, F_g_4 = 0, 0
 
-    f_x5_x11 = max(0, x[4] - x[10])
-    f_x8_x14 = max(0, x[7] - x[13])
+#     f_x5_x11 = max(0, x[4] - x[10])
+#     f_x8_x14 = max(0, x[7] - x[13])
 
-    h_x5_x11 = h(x[4] - x[10])
-    h_x8_x14 = h(x[7] - x[13])
+#     h_x5_x11 = self.h(x[4] - x[10])
+#     h_x8_x14 = h(x[7] - x[13])
 
-    T_r1_y = torques[0]
-    T_r2_y = torques[1]
-    T_r3_y = torques[2]
-    T_r4_y = torques[3]
-    h_F_g_2 = h(F_g_2)
-    h_F_g_4 = h(F_g_4)
+#     T_r1_y = torques[0]
+#     T_r2_y = torques[1]
+#     T_r3_y = torques[2]
+#     T_r4_y = torques[3]
+#     h_F_g_2 = h(F_g_2)
+#     h_F_g_4 = h(F_g_4)
 
-    T_r5_x_dx_y = torques[4] * h_F_g_2
-    T_r6_x_dx_y = torques[5] * h_F_g_4
+#     T_r5_x_dx_y = torques[4] * h_F_g_2
+#     T_r6_x_dx_y = torques[5] * h_F_g_4
 
-    Q_x_dx_y_F_g = np.array([
-        0,
-        -g,
-        0,
-        -g,
-        (-b_1 * abs(x[4] - np.pi / 2) * dx[4] - (b_2 + b_k * f_x5_x11) * (dx[4] - dx[10]) - k_k * h_x5_x11 + T_r1_y + T_r3_y) / I_1,
-        0,
-        -g,
-        (-b_1 * abs(x[7] - np.pi / 2) * dx[7] - (b_2 + b_k * f_x8_x14) * (dx[7] - dx[13]) - k_k * h_x8_x14 + T_r2_y + T_r4_y) / I_1,
-        F_g_1 / m_2,
-        F_g_2 / m_2 - g,
-        (-F_g_1 * l_2_2_sin_x11 - F_g_2 * l_2_2_cos_x11 - (b_2 + b_k * f_x5_x11) * (dx[10] - dx[4]) + k_k * h_x5_x11 - T_r3_y - T_r5_x_dx_y) / I_2,
-        F_g_3 / m_2,
-        F_g_4 / m_2 - g,
-        (-F_g_3 * l_2_2_sin_x14 - F_g_4 * l_2_2_cos_x14 - (b_2 + b_k * f_x8_x14) * (dx[13] - dx[7]) + k_k * h_x8_x14 - T_r4_y - T_r6_x_dx_y) / I_2
-    ])
+#     Q_x_dx_y_F_g = np.array([
+#         0,
+#         -g,
+#         0,
+#         -g,
+#         (-b_1 * abs(x[4] - np.pi / 2) * dx[4] - (b_2 + b_k * f_x5_x11) * (dx[4] - dx[10]) - k_k * h_x5_x11 + T_r1_y + T_r3_y) / I_1,
+#         0,
+#         -g,
+#         (-b_1 * abs(x[7] - np.pi / 2) * dx[7] - (b_2 + b_k * f_x8_x14) * (dx[7] - dx[13]) - k_k * h_x8_x14 + T_r2_y + T_r4_y) / I_1,
+#         F_g_1 / m_2,
+#         F_g_2 / m_2 - g,
+#         (-F_g_1 * l_2_2_sin_x11 - F_g_2 * l_2_2_cos_x11 - (b_2 + b_k * f_x5_x11) * (dx[10] - dx[4]) + k_k * h_x5_x11 - T_r3_y - T_r5_x_dx_y) / I_2,
+#         F_g_3 / m_2,
+#         F_g_4 / m_2 - g,
+#         (-F_g_3 * l_2_2_sin_x14 - F_g_4 * l_2_2_cos_x14 - (b_2 + b_k * f_x8_x14) * (dx[13] - dx[7]) + k_k * h_x8_x14 - T_r4_y - T_r6_x_dx_y) / I_2
+#     ])
 
-    dx5_2 = dx[4]**2
-    dx8_2 = dx[7]**2
-    dx11_2 = dx[10]**2
-    dx14_2 = dx[13]**2
+#     dx5_2 = dx[4]**2
+#     dx8_2 = dx[7]**2
+#     dx11_2 = dx[10]**2
+#     dx14_2 = dx[13]**2
 
-    l_1_2_cos_x5_dx5_2 = l_1_2_cos_x5 * dx5_2
-    l_1_2_sin_x5_dx5_2 = l_1_2_sin_x5 * dx5_2
-    l_1_2_cos_x8_dx8_2 = l_1_2_cos_x8 * dx8_2
-    l_1_2_sin_x8_dx8_2 = l_1_2_sin_x8 * dx8_2
+#     l_1_2_cos_x5_dx5_2 = l_1_2_cos_x5 * dx5_2
+#     l_1_2_sin_x5_dx5_2 = l_1_2_sin_x5 * dx5_2
+#     l_1_2_cos_x8_dx8_2 = l_1_2_cos_x8 * dx8_2
+#     l_1_2_sin_x8_dx8_2 = l_1_2_sin_x8 * dx8_2
 
-    D_x_dx = np.array([
-        l_1_2_cos_x5_dx5_2,
-        -l_1_2_sin_x5_dx5_2,
-        l_1_2_cos_x8_dx8_2,
-        -l_1_2_sin_x8_dx8_2,
-        l_1_2_cos_x5_dx5_2 + l_2_2_cos_x11 * dx11_2,
-        -l_1_2_sin_x5_dx5_2 - l_2_2_sin_x11 * dx11_2,
-        l_1_2_cos_x8_dx8_2 + l_2_2_cos_x14 * dx14_2,
-        -l_1_2_sin_x8_dx8_2 - l_2_2_sin_x14 * dx14_2
-    ])
+#     D_x_dx = np.array([
+#         l_1_2_cos_x5_dx5_2,
+#         -l_1_2_sin_x5_dx5_2,
+#         l_1_2_cos_x8_dx8_2,
+#         -l_1_2_sin_x8_dx8_2,
+#         l_1_2_cos_x5_dx5_2 + l_2_2_cos_x11 * dx11_2,
+#         -l_1_2_sin_x5_dx5_2 - l_2_2_sin_x11 * dx11_2,
+#         l_1_2_cos_x8_dx8_2 + l_2_2_cos_x14 * dx14_2,
+#         -l_1_2_sin_x8_dx8_2 - l_2_2_sin_x14 * dx14_2
+#     ])
 
-    d2x = P_x *((C_x * P_x ) /(D_x_dx - C_x * Q_x_dx_y_F_g)) + Q_x_dx_y_F_g
-    dx = dx + dt * d2x
-    x = x + dt * dx
+#     d2x = P_x *((C_x * P_x ) /(D_x_dx - C_x * Q_x_dx_y_F_g)) + Q_x_dx_y_F_g
+#     dx = dx + dt * d2x
+#     x = x + dt * dx
+#     #observation space is x, dx 
+#     force = np.array([F_g_1, F_g_2, F_g_3, F_g_4])
 
-    force = np.array([F_g_1, F_g_2, F_g_3, F_g_4])
-
-    return x, dx, force
+#     return x, dx, force
