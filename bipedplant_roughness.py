@@ -1,9 +1,8 @@
 import numpy as np
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import torch
 from gait_generator_net import SimpleFCNN
-x_init = [0,1.1,]
 
 class BipedEnv(gym.Env):
     def __init__(self,render=False, render_mode= None):
@@ -15,12 +14,12 @@ class BipedEnv(gym.Env):
         self.l_1 = 0.5
         self.l_2 = 0.6
         self.g = 9.8
-        self.b_1 = 10
-        self.b_2 = 10
-        self.b_k = 1000
-        self.b_g = 1000
-        self.k_k = 10000
-        self.k_g = 10000
+        self.b_1 = 10.0
+        self.b_2 = 10.0
+        self.b_k = 1000.0
+        self.b_g = 1000.0
+        self.k_k = 10000.0
+        self.k_g = 10000.0
         self.l_1_2 = self.l_1 / 2
         self.l_2_2 = self.l_2 / 2
         self.ramp_angle = 0
@@ -32,17 +31,17 @@ class BipedEnv(gym.Env):
         self.m_1Inv = 1 / self.m_1
         self.m_2Inv = 1 / self.m_2
         self.max_steps = 500
-        self.action_space = spaces.Box(low=-20, high=20, shape=(6,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(28,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-10, high=10, shape=(6,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-200, high=200, shape=(30,), dtype=np.float32)
         self.t = 0
         self.dt = 0.01
         self.gaitgen_net = SimpleFCNN()
-        self.gaitgen_net.load_state_dict(torch.load('model_hs512_lpmse_bs64_epoch1000_fft.pth'))
+        self.gaitgen_net.load_state_dict(torch.load('model_hs512_lpmse_bs64_epoch1000_fft.pth',weights_only=True))
         self.normalizationconst = np.load(rf"normalization_constants.npy")
         #x,dx are the states
         #torques are the actions
 
-    def reset(self):
+    def reset(self,seed=None):
         # Reset the state of the environment to an initial state
         self.initialized +=1
         self.t = 0
@@ -56,25 +55,51 @@ class BipedEnv(gym.Env):
         encoder_vec[0] = selected_speed/3
         encoder_vec[1] = right_len
         encoder_vec[2] = left_len
-        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)
-        self.reference = self.findgait(encoder_vec)
-        self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)
+        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
+        self.reference = self.findgait(encoder_vec)                     #Find the gait
+        self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)     #Clip the gait
+        self.reference[:,1] = self.reference[:,1] + self.reference[:,0] #adjust for angle arrangment
+        self.reference[:,3] = self.reference[:,3] + self.reference[:,2]
+        distances = np.linalg.norm(self.reference[:200], axis=1)
+        closest_idx = np.argmin(distances)                              #Starting point of the gait
+        self.reference = self.reference[closest_idx:closest_idx+200,:]
         self.reference = np.pi/2 - self.reference
-        self.state_x = np.array([0, 1.1, 0, self.l_2+self.l_1_2, np.pi/2, 0, self.l_2+self.l_1_2, np.pi/2, 0, self.l_2_2, np.pi/2, 0, self.l_2_2, np.pi/2])
+        x = np.zeros((14))
+        x[0] = 0
+        x[1] = 1.09
+        x[4] = 0.45 * np.pi
+        x[10] = 0.45 * np.pi
+        x[7] = 0.57 * np.pi
+        x[13] = 0.57 * np.pi
+
+        # Calculate other values based on the equations
+        x[2] = x[0] + self.l_1 * np.cos(x[4]) / 2
+        x[3] = x[1] - self.l_1 * np.sin(x[4]) / 2
+        x[5] = x[0] + self.l_1 * np.cos(x[7]) / 2
+        x[6] = x[1] - self.l_1 * np.sin(x[7]) / 2
+        x[8] = x[0] + self.l_1 * np.cos(x[4]) + self.l_2 * np.cos(x[10]) / 2
+        x[9] = x[1] - self.l_1 * np.sin(x[4]) - self.l_2 * np.sin(x[10]) / 2
+        x[11] = x[0] + self.l_1 * np.cos(x[7]) + self.l_2 * np.cos(x[13]) / 2
+        x[12] = x[1] - self.l_1 * np.sin(x[7]) - self.l_2 * np.sin(x[13]) / 2
+
+        env_info = np.array([self.ramp_angle,selected_speed])
+        self.state_x = np.concatenate([env_info,x])
         self.state_dx = np.zeros(14)
         self.state = np.concatenate([self.state_x, self.state_dx])
-        return self.state
+        self.reset_info = {}
+        return self.state, self.reset_info
 
     def step(self,torques):
 
-        x = self.state[:14]
-        dx = self.state[14:]
+        x = self.state[2:16]
+        dx = self.state[16:]
         self.t += 1
-
-        x[4] = x[4] % np.pi
-        x[7] = x[7] % np.pi
-        x[10] = x[10] % np.pi
-        x[13] = x[13] % np.pi
+        if self.t >100:
+            print('some walking pal')
+        x[4] = x[4] % (2*np.pi)
+        x[7] = x[7] % (2*np.pi)
+        x[10] = x[10] % (2*np.pi)
+        x[13] = x[13] % (2*np.pi)
 
         sin_x5  =np.sin(x[4])
         cos_x5  =np.cos(x[4])
@@ -215,27 +240,24 @@ class BipedEnv(gym.Env):
         d2x = P_x @ np.linalg.solve((C_x @ P_x), temp_8x1) + Q_x_dx_y_F_g  # (14x1)
         dx = dx + self.dt * d2x
         x = x + self.dt * dx
-        self.state[:14] = x
-        self.state[14:] = dx
+        x[[4,10,7,13]] = x[[4,10,7,13]] % (2*np.pi)
+        self.state[2:16] = x
+        self.state[16:] = dx
         #force = np.array([F_g_1, F_g_2, F_g_3, F_g_4])
 
-        reward, done = self.biped_reward(self.state[:14], self.state[14:],torques)
+        reward, done = self.biped_reward(self.state[2:16], self.state[16:],torques)
         info = {}
-        if self.t == 199:
-            done = True
-        return self.state, reward, done, info
-
+        truncated = False
+        if self.t == 200:
+            truncated = True
+        return self.state, reward, done, truncated, info
 
     def biped_reward(self,x, dx,torques):
         done = False
         reward = 0
         current_step = (self.t-1) * self.dt
-        # if self.initialized < 500000:
-        #     pos_weight = 0.5
-        #     # Define the reward function
-        #     reference_move = self.reference[t]
-        #     pos_diff = np.sum(np.linalg.norm(x[[4,10,7,13]] - reference_move))
-        #     reward -= pos_weight * pos_diff
+        if self.t  < 194:
+            reward -=  0.5* np.mean(np.linalg.norm(self.reference[self.t:self.t+5,:] - x[[4,10,7,13]]))
 
         if x[1] < 0.7:
             reward -= 100
@@ -244,7 +266,7 @@ class BipedEnv(gym.Env):
             reward += 1
     
         # include speed reward something like
-        reward -=  0.1* (np.abs(x[0] - self.reference_speed * current_step))
+        reward -= (np.abs(x[0] - self.reference_speed * current_step))
         return reward, done
 
     def close(self):

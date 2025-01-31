@@ -1,5 +1,4 @@
 from bipedplant_roughness import BipedEnv
-import numpy as np
 import os
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
@@ -50,6 +49,7 @@ class CustomCheckpointCallback(BaseCallback):
         self.save_path = save_path
 
     def _on_step(self) -> bool:
+        done = False
         # Save the model every `save_freq` steps
         if self.n_calls % self.save_freq == 0:
             model_path = f"model_checkpoint_{self.n_calls}_steps.zip"
@@ -57,6 +57,7 @@ class CustomCheckpointCallback(BaseCallback):
             if self.verbose > 0:
                 print(f"Model saved at step {self.n_calls} to {model_path}")
                 print(f"Time taken for this checkpoint: {time.time() - t0:.2f} seconds")
+
         return True
 
 # Usage
@@ -73,7 +74,22 @@ env = BipedEnv(render_mode='human')
 policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
 
 
-model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=0, device="cpu", n_steps=400, batch_size=400)   
+policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
+model = PPO(
+    "MlpPolicy",
+    env,
+    policy_kwargs=policy_kwargs,
+    learning_rate=1e-4,
+    gamma=0.999,
+    clip_range=0.1,
+    ent_coef=0.01,
+    vf_coef=0.75,
+    batch_size=128,
+    max_grad_norm=0.3,
+    gae_lambda=0.99,
+    verbose=0,
+    device="cpu"
+)
 
 model.learn(total_timesteps=2000000, callback=callbacks)
 
