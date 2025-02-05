@@ -1,155 +1,252 @@
 import os
-
 import numpy as np
-
+from scipy.signal import resample
+import torch
+from gait_generator_net import SimpleFCNN
 import gymnasium as gym
 from gymnasium import spaces
 from gymnasium.utils import seeding
-
 import pybullet as p
 import pybullet_data
+import time
 
-# Constants
-MAX_TORQUE=2e3
-dt=0.001
+dt=1/240
 GRAVITY=-9.8
 mu = 0.65
 kp = np.array([ 0. ,  0.3,  0.2,  0.1,  0.3,  0.2,  0.1])
 kd = 0.1*kp
-max_iters = 5e4
-target_vel = 0.#3.5
-class Biped2dBullet(gym.Env):
-    """2D Biped environment 
-    """
-    def __init__(self):
-        self.p = p
-        #self.physics_client = self.p.connect(self.p.GUI)
+
+class BipedEnv(gym.Env):
+    def __init__(self,render=False, render_mode= None):
+
+        if render_mode == 'human':
+            self.physics_client = p.connect(p.GUI)
+        else:
+            self.physics_client = p.connect(p.DIRECT)
+
         self.num_control_steps=1
-        #self.action_space = spaces.Box(low=-MAX_TORQUE*np.ones(12), high=MAX_TORQUE*np.ones(12))
-        #self.observation_space = spaces.Box(low=-np.inf*np.ones(58), high=np.inf*np.ones(58))
-        self.kp = kp
-        self.kd = kd
+        self.leg_len = 0.9 
+        self.render_mode = render_mode
+        # self.kp = kp
+        # self.kd = kd
         self.joint_idx = [2,3,4,5,6,7,8]
-        self.max_torque=MAX_TORQUE
         self.scale = 1.
         self.dt = dt
-        self.g = GRAVITY
         self.mu = mu
         self.ground_kp=1e6
         self.ground_kd=6e3
-        self.plane_ids = [] 
-        self.target_vel = target_vel
-        self.max_iters = max_iters
-    
-    def reset(self, disable_gui=False):
-        if disable_gui:
-            self.physics_client = self.p.connect(self.p.DIRECT)
-        elif disable_gui==False:
-            self.physics_client = self.p.connect(self.p.GUI)
-        self.p.resetSimulation()
-        self.p.setTimeStep(self.dt)
-        self.p.setGravity(0,0,self.g)
-        #load character
-        cubeStartPos = [0,0,1.185]
-        cubeStartOrientation = self.p.getQuaternionFromEuler([0.,0.,0.])
-        self.sim_id = self.p.loadURDF("assets/biped2d.urdf", cubeStartPos, cubeStartOrientation)
-        #load terrain
-        self.plane_id = self.p.loadSDF("assets/plane_stadium.sdf")[0]
-        self.p.setGravity(0,0,GRAVITY)
-        self.plane_ids.append(self.plane_id)
-        self.iters = 0
-        for plane_id in self.plane_ids:
-            self.p.changeDynamics(plane_id, -1, lateralFriction=self.mu, contactStiffness=self.ground_kp, contactDamping=self.ground_kd) 
-        
-        #disable motors (in order to do control via torques)
-        for joint in range(p.getNumJoints(self.sim_id)):
-            self.p.setJointMotorControl2(self.sim_id, joint, p.VELOCITY_CONTROL, force=0)
-        
-        for i in range(250):#+ 10*np.random.randint(low=0, high=20)):
-            self.p.stepSimulation()
-    
-        return self.get_state() 
-    
-    def make_step(self, step_x, step_y,step_z):
-        plane_id = self.p.loadURDF("plane.urdf", [0,step_y-15,step_z],self.p.getQuaternionFromEuler([0,0,0]))
-        plane_id2 = self.p.loadURDF("plane.urdf", [0,step_y+0.48,step_z-15],self.p.getQuaternionFromEuler([-1.54,0,0]))
-        self.plane_ids.append(plane_id)
-        self.plane_ids.append(plane_id2)
-   
-    def has_contact(self, bullet_client, bodyA, bodyB, linkA):
-        if len(bullet_client.getContactPoints(bodyA,bodyB, linkIndexA=linkA))==0:
-            return False
-        else:
-            return True
 
-    def step(self, action):
-        """Performs PD control and applies additional torque for the 6 joints
-        """
-        for i in range(self.num_control_steps):
-            #pd control
-            self.pd_control(action[:6])
-            #additional torque
-            self.apply_torque(action[6:])   
-        state = self.get_state()
-        reward = self.get_reward()
+        self.max_steps = int(3*1/dt)
+        self.action_space = spaces.Box(low=-1, high=1, shape=(7,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-500, high=500, shape=(20,), dtype=np.float32)
+        self.t = 0
+        self.dt = 0.01
+
+        self.gaitgen_net = SimpleFCNN()
+        self.gaitgen_net.load_state_dict(torch.load('model_hs512_lpmse_bs64_epoch1000_fft.pth',weights_only=True))
+        
+        self.normalizationconst = np.load(rf"normalization_constants.npy")
+        self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
+        self.planeId = p.loadURDF("assets/plane.urdf",physicsClientId=self.physics_client)
+        p.changeDynamics(self.planeId, -1, lateralFriction=self.mu, contactStiffness=self.ground_kp, contactDamping=self.ground_kd)
+        p.setGravity(0,0,-9.8)
+        p.setTimeStep(self.dt)
+        p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+        self.joint_no = p.getNumJoints(self.robot)
+        self.joint_indices = np.arange(2,9)
+        self.max_torque = 300
+
+    def reset(self,seed=None):
+
+        p.resetSimulation(physicsClientId=self.physics_client)
+        p.setTimeStep(self.dt)
+        self.ramp_angle = np.random.uniform(-2, 2) * np.pi / 180 # Random angle between -3 and 3
+        plane_orientation = p.getQuaternionFromEuler([self.ramp_angle, 0 , 0])
+        self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
+        self.planeId = p.loadURDF("assets/plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
+        # self.planeId = p.loadSDF("assets/plane_stadium.sdf",physicsClientId=self.physics_client)
+        p.setGravity(0,0,-9.8)
+        p.changeDynamics(self.planeId, -1, lateralFriction=self.mu, contactStiffness=self.ground_kp, contactDamping=self.ground_kd)
+        p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+        
+        desired_speed = np.random.rand()*3
+        self.reference_speed = desired_speed
+        self.t = 0
+        encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
+        encoder_vec[0] = self.reference_speed/3
+        encoder_vec[1] = self.leg_len
+        encoder_vec[2] = self.leg_len
+        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
+        self.reference = self.findgait(encoder_vec)                     #Find the gait
+        self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)     #Clip the gait
+        distances = np.linalg.norm(self.reference[:200], axis=1)
+        closest_idx = np.argmin(distances)                              #Starting point of the gait
+        self.reference = self.reference[closest_idx:closest_idx+self.max_steps+10,:]
+        self.state, self.state_info = self.return_state()
+        self.reset_info = {'current state':self.state, "state info":self.state_info}
+        if self.render_mode == 'human':
+            print(self.reference_speed, self.ramp_angle)
+            self.reference_speed = 1.5
+            self.ramp_angle = 0
+        return self.state, self.reset_info
+
+    def step(self,torques):
+
+        torques = np.clip(torques, -1, 1)
+        torques = torques * self.max_torque
+
+        self.t+=1
+        p.setJointMotorControlArray(
+            bodyIndex=self.robot,
+            jointIndices=self.joint_indices,
+            controlMode=p.TORQUE_CONTROL,
+            forces=torques,
+            physicsClientId=self.physics_client
+        )
+
+        # Step simulation
+        p.stepSimulation()
+        #time.sleep(self.dt)
+        self.state, state_info = self.return_state()
+        reward, done = self.biped_reward(self.state,torques)
+        truncated = False
+
+        if self.t > self.max_steps:
+            truncated = True
+
+        return self.state, reward, done, truncated, state_info
+
+    def biped_reward(self,x,torques):
+
+        current_time = self.t*self.dt
         done = False
-        if self.p.getLinkState(self.sim_id,2)[0][2]<0.5:
-            #abs(state[18])<0.05 and self.iters>2000 and abs(self.target_vel)>0.05: 
+        reward = 0
+        # Reward for staying close to the reference trajectory
+        reward -= np.mean(np.linalg.norm(self.reference[self.t:self.t+10,:] - x[[7,8,10,11]]))
+        # Reward to penalize falling
+        forward_reward =  0.1 * x[3]  # Encourage moving forward
+        reward += forward_reward
+        if x[4] > 1.3:
+            reward -= 100
             done = True
-            reward+=-100000
-        if self.iters>self.max_iters:# or (self.iters>2000 and abs(state[18])<0.05 and abs(self.target_vel)>0.05):
+        elif x[4] < 0.9:
+            reward -= 100
             done = True
-        self.iters+=1
-        return state, reward, done, None 
-
-    def render(self):
-        self.p.resetDebugVisualizerCamera(2,90,3, [self.p.getLinkState(self.sim_id,2)[0][0], self.p.getLinkState(self.sim_id,2)[0][1],0.8]) 
-
-    def pd_control(self, action):
-        """Performs PD control for target angles (given by action)
-        """
-        for i,j in enumerate(self.joint_idx[1:]):
-            if action[i] is not None and not np.isnan(action[i]):
-                torque_i = -self.kp[i]*(self.p.getJointState(self.sim_id, j)[0]-action[i]) - self.kd[i]*self.p.getJointState(self.sim_id, j)[1]
-                self.p.setJointMotorControl2(self.sim_id, j, self.p.TORQUE_CONTROL, force=np.clip(self.scale*torque_i, -self.max_torque,self.max_torque))
-        self.p.stepSimulation()
+        else:
+            reward += 1
     
-    def apply_torque(self, action):
-        """Applies given torque at each joint
-        """
-        for i,j in enumerate(self.joint_idx[1:]):
-            if abs(action[i])>1e-5:
-                self.p.setJointMotorControl2(self.sim_id, j, self.p.TORQUE_CONTROL, force=np.clip(self.scale*action[i],-self.max_torque,self.max_torque))
-        self.p.stepSimulation()
-    
-    def get_reward(self):
-        """Reward is the squared difference between torso velocity and target forwards velocity
-        """
-        return -(self.target_vel - self.p.getLinkState(self.sim_id, 2, computeLinkVelocity=1)[-2][1])**2
-    
-    def get_state(self):
-        """Returns angular position and angular velocity of every joint, position and velocity of every link, and foot contact information
-        """
-        
-        state = []
-        for j in self.joint_idx:
-            joint_state = self.p.getJointState(self.sim_id,j)
-            state.append(joint_state[0])
-            state.append(joint_state[1])
-        for j in range(2,9):
-            link_state = self.p.getLinkState(self.sim_id, j, computeLinkVelocity=1)
-            state.append(link_state[0][0])
-            state.append(link_state[0][1])
-            state.append(link_state[0][2])
-            state.append(link_state[-2][0])
-            state.append(link_state[-2][1])
-            state.append(link_state[-2][2])
+        # Reward for staying close to the reference speed
+        if np.abs(x[3] - self.reference_speed*current_time) < 0.25:
+            reward += 1
+        return reward, done
 
-        for foot_link in [5,8]:
-            if self.has_contact(self.p, self.sim_id, self.plane_id, foot_link):
-                state.append(1.)
-            else:
-                state.append(-1.)
-        return np.array(state)
     def close(self):
-        self.p.disconnect()
+        self.physics_client.disconnect()
+        print("Environment closed")
+
+    # def y_g(self,xrl, rampAngle):
+    #     """
+    #     Ground pattern function.
+        
+    #     Parameters:
+    #         xrl: Input value (e.g., distance or position).
+    #         rampAngle: Angle of the ramp in degrees.
+        
+    #     Returns:
+    #         output: The calculated ground pattern value.
+    #     """
+    #     # Calculate the ground pattern value
+    #     output = np.sin(np.pi * rampAngle / 180) * xrl
+    #     return output
+
+    # def h(self,input):
+    #     if input > 0:
+    #         return 1
+    #     else:
+    #         return 0    
+
+    def findgait(self,input_vec):
+
+        freqs = self.gaitgen_net(input_vec)
+        predictions = freqs.reshape(-1,2,25,4)
+        predictions = predictions.detach().numpy()
+        predictions = predictions[0]
+        predictions = self.denormalize(predictions)
+        pred_time = self.pred_ifft(predictions)
+
+        return pred_time
+
+    def denormalize(self,pred):
+
+        pred[0,:,0] = pred[0,:,0] * self.normalizationconst[0]
+        pred[0,:,1] = pred[0,:,1] * self.normalizationconst[1]
+        pred[0,:,2] = pred[0,:,2] * self.normalizationconst[2]
+        pred[0,:,3] = pred[0,:,3] * self.normalizationconst[3]
+        pred[1,:,0] = pred[1,:,0] * self.normalizationconst[4]
+        pred[1,:,1] = pred[1,:,1] * self.normalizationconst[5]
+        pred[1,:,2] = pred[1,:,2] * self.normalizationconst[6]
+        pred[1,:,3] = pred[1,:,3] * self.normalizationconst[7]
+        
+        return pred
+        
+
+    def pred_ifft(self,predictions):
+
+        real_pred = predictions[0,:,:]
+        imag_pred = predictions[0,:,:]
+        predictions = real_pred + 1j*imag_pred
+
+        padded_pred = np.zeros((257,4),dtype=complex)
+        padded_pred[:25,:] = predictions
+
+        padded_time = np.fft.irfft(padded_pred, axis=0)
+        pred_time = padded_time[56:-56,:]
+        #upsample from 100 hz to 240 hz
+        if self.dt < 0.01:
+            num_samples = int(400 * 2.4)  # 960
+            # Upsample using Fourier method
+            pred_time = resample(pred_time, num_samples, axis=0)
+
+        pred_time = np.repeat(pred_time, 10, axis=0)
+
+        return pred_time
+
+    def return_state(self):
+        link_state = p.getLinkState(self.robot, 2,computeLinkVelocity=True)          #link index 2 is for torso
+        (pos_x,pos_y,pos_z) = link_state[0]                #3D position of the link
+        y_vel = link_state[6][1]                           #y velocity of the link
+
+        init_states = p.getJointStates(self.robot, np.arange(0,self.joint_no))
+        init_states = init_states[2:]                       #First two joints are external joints (3rd is torso and so on) 
+        self.state = np.zeros(len(init_states)*2+6)
+
+        self.state[0] = self.reference_speed
+        self.state[1] = self.ramp_angle
+        self.state[2] = pos_x
+        self.state[3] = pos_y
+        self.state[4] = pos_z
+        self.state[5] = y_vel
+        state_info = {0:"reference_speed",
+                      1:"ramp_angle",
+                      2:"pos_x",
+                      3:"pos_y",
+                      4:"pos_z",
+                      5:"y_vel",
+                      6:"torso_pos",
+                      7:"rhip_pos",
+                      8:"rknee_pos",
+                      9:"rankle_pos",
+                      10:"lhip_pos",
+                      11:"lknee_pos",
+                      12:"lankle_pos",
+                      13:"torso_vel",
+                      14:"rhip_vel",
+                      15:"rknee_vel",
+                      16:"rangle_vel",
+                      17:"lhip_vel",
+                      18:"lknee_vel",
+                      19:"lankle_vel"}
+        for i in range(len(init_states)):
+            self.state[i+6] = init_states[i][0]
+            self.state[i+6+len(init_states)] = init_states[i][1]
+        return self.state, state_info
