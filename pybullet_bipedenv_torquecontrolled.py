@@ -10,68 +10,79 @@ import pybullet as p
 import pybullet_data
 import time
 
-dt=1/240
-GRAVITY=-9.8
+dt= 1/240
 mu = 0.65
-kp = np.array([ 0. ,  0.3,  0.2,  0.1,  0.3,  0.2,  0.1])
-kd = 0.1*kp
 
 class BipedEnv(gym.Env):
-    def __init__(self,render=False, render_mode= None):
-
+    def __init__(self,render=False, render_mode= None,control= 'torque',action_dim=6):
+        self.init_no = 0
         if render_mode == 'human':
             self.physics_client = p.connect(p.GUI)
         else:
             self.physics_client = p.connect(p.DIRECT)
-
-        self.num_control_steps=1
-        self.leg_len = 0.9 
-        self.render_mode = render_mode
-        # self.kp = kp
-        # self.kd = kd
-        self.joint_idx = [2,3,4,5,6,7,8]
+        
         self.scale = 1.
         self.dt = dt
         self.mu = mu
-        self.ground_kp=1e6
+        self.ground_kp=1e5
         self.ground_kd=6e3
+        
+        self.robot = p.loadURDF("assets/biped2d_revolute.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
+        self.planeId = p.loadURDF("assets/plane.urdf",physicsClientId=self.physics_client)
+        p.changeDynamics(self.planeId, -1, lateralFriction=self.mu, contactStiffness=self.ground_kp, contactDamping=self.ground_kd)
+        p.setGravity(0,0,-9.81)
 
-        self.max_steps = int(3*1/dt)
-        self.action_space = spaces.Box(low=-1, high=1, shape=(7,), dtype=np.float32)
+        self.control_mode = control
+        self.leg_len = 0.9 
+        self.render_mode = render_mode
+        self.action_space_dimension=action_dim
+
+        if self.control_mode == 'torque':
+            if self.action_space_dimension == 6:
+                self.joint_idx = [3,4,5,6,7,8]
+                p.setJointMotorControlArray(self.robot,self.joint_idx, p.VELOCITY_CONTROL, forces=[0]*6)
+            elif self.action_space_dimension == 7:
+                self.joint_idx = [2,3,4,5,6,7,8]
+                p.setJointMotorControlArray(self.robot,self.joint_idx, p.VELOCITY_CONTROL, forces=[0]*7)
+
+        self.max_steps = int(5*(1/dt))
+        if self.control_mode == 'torque':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(self.action_space_dimension,), dtype=np.float32)
+        else:
+            self.action_space = spaces.Box(low=-np.pi, high=np.pi, shape=(7,), dtype=np.float32)
+    
         self.observation_space = spaces.Box(low=-500, high=500, shape=(20,), dtype=np.float32)
         self.t = 0
-        self.dt = 0.01
-
         self.gaitgen_net = SimpleFCNN()
         self.gaitgen_net.load_state_dict(torch.load('model_hs512_lpmse_bs64_epoch1000_fft.pth',weights_only=True))
         
         self.normalizationconst = np.load(rf"normalization_constants.npy")
-        self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
-        self.planeId = p.loadURDF("assets/plane.urdf",physicsClientId=self.physics_client)
-        p.changeDynamics(self.planeId, -1, lateralFriction=self.mu, contactStiffness=self.ground_kp, contactDamping=self.ground_kd)
-        p.setGravity(0,0,-9.8)
-        p.setTimeStep(self.dt)
-        p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
         self.joint_no = p.getNumJoints(self.robot)
-        self.joint_indices = np.arange(2,9)
-        self.max_torque = 300
+        self.max_torque = 1000
+        self.torso_maxtorque = 200
 
     def reset(self,seed=None):
-
+        self.t = 0
+        self.init_no += 1
+        
+        if self.init_no % 100 == 1:
+            self.reference_speed = 0.5 + np.random.rand()*2.5
+            self.ramp_angle = np.random.uniform(-1, 1) * np.pi / 180 # Random angle between -3 and 3
+        
         p.resetSimulation(physicsClientId=self.physics_client)
-        p.setTimeStep(self.dt)
-        self.ramp_angle = np.random.uniform(-2, 2) * np.pi / 180 # Random angle between -3 and 3
         plane_orientation = p.getQuaternionFromEuler([self.ramp_angle, 0 , 0])
         self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
         self.planeId = p.loadURDF("assets/plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
         # self.planeId = p.loadSDF("assets/plane_stadium.sdf",physicsClientId=self.physics_client)
-        p.setGravity(0,0,-9.8)
+        p.setGravity(0,0,-9.81)
         p.changeDynamics(self.planeId, -1, lateralFriction=self.mu, contactStiffness=self.ground_kp, contactDamping=self.ground_kd)
-        p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
         
-        desired_speed = np.random.rand()*3
-        self.reference_speed = desired_speed
-        self.t = 0
+        if self.control_mode == 'torque':
+            if self.action_space_dimension == 6:
+                p.setJointMotorControlArray(self.robot,self.joint_idx, p.VELOCITY_CONTROL, forces=[0]*6)
+            elif self.action_space_dimension == 7:
+                p.setJointMotorControlArray(self.robot,self.joint_idx, p.VELOCITY_CONTROL, forces=[0]*7)
+    
         encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
         encoder_vec[0] = self.reference_speed/3
         encoder_vec[1] = self.leg_len
@@ -79,36 +90,59 @@ class BipedEnv(gym.Env):
         encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
         self.reference = self.findgait(encoder_vec)                     #Find the gait
         self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)     #Clip the gait
-        distances = np.linalg.norm(self.reference[:200], axis=1)
+        length_ref = int(self.reference.shape[0] / 5)
+        distances = np.linalg.norm(self.reference[:length_ref], axis=1)
         closest_idx = np.argmin(distances)                              #Starting point of the gait
         self.reference = self.reference[closest_idx:closest_idx+self.max_steps+10,:]
         self.state, self.state_info = self.return_state()
         self.reset_info = {'current state':self.state, "state info":self.state_info}
+        
         if self.render_mode == 'human':
             print(self.reference_speed, self.ramp_angle)
-            self.reference_speed = 1.5
-            self.ramp_angle = 0
         return self.state, self.reset_info
 
-    def step(self,torques):
-
-        torques = np.clip(torques, -1, 1)
-        torques = torques * self.max_torque
-
+    def step(self,x):
         self.t+=1
-        p.setJointMotorControlArray(
-            bodyIndex=self.robot,
-            jointIndices=self.joint_indices,
-            controlMode=p.TORQUE_CONTROL,
-            forces=torques,
-            physicsClientId=self.physics_client
-        )
+        if self.control_mode == 'torque':
+            if self.action_space_dimension == 6:
+                torques = np.clip(x, -1, 1)
+                torques[[0,1,3,4]] = torques[[0,1,3,4]] * self.max_torque
+                torques[[2,5]] = torques[[2,5]] * self.torso_maxtorque
+            
+                p.setJointMotorControlArray(
+                    bodyIndex=self.robot,
+                    jointIndices=self.joint_idx,
+                    controlMode=p.TORQUE_CONTROL,
+                    forces=torques,
+                    physicsClientId=self.physics_client
+                )
+                p.setJointMotorControl2(self.robot,2, controlMode=p.POSITION_CONTROL)
+                # Step simulation
+            elif self.action_space_dimension == 7:
 
-        # Step simulation
+                torques = np.clip(x, -1, 1)
+                torques[[1,2,4,5]] = torques[[1,2,4,5]] * self.max_torque
+                torques[[0,3,6]] = torques[[0,3,6]] * self.torso_maxtorque
+            
+                p.setJointMotorControlArray(
+                    bodyIndex=self.robot,
+                    jointIndices=self.joint_idx,
+                    controlMode=p.TORQUE_CONTROL,
+                    forces=torques,
+                    physicsClientId=self.physics_client
+                )
+                # Step simulation
+        else:
+            p.setJointMotorControlArray(
+                bodyIndex=self.robot,
+                jointIndices=[2,3,4,5,6,7,8],
+                controlMode=p.POSITION_CONTROL,
+                targetPositions=x,
+                physicsClientId=self.physics_client
+            )
         p.stepSimulation()
-        #time.sleep(self.dt)
         self.state, state_info = self.return_state()
-        reward, done = self.biped_reward(self.state,torques)
+        reward, done = self.biped_reward(self.state)
         truncated = False
 
         if self.t > self.max_steps:
@@ -116,28 +150,42 @@ class BipedEnv(gym.Env):
 
         return self.state, reward, done, truncated, state_info
 
-    def biped_reward(self,x,torques):
+    def biped_reward(self,x):
 
-        current_time = self.t*self.dt
-        done = False
         reward = 0
-        # Reward for staying close to the reference trajectory
-        reward -= np.mean(np.linalg.norm(self.reference[self.t:self.t+10,:] - x[[7,8,10,11]]))
-        # Reward to penalize falling
-        forward_reward =  0.1 * x[3]  # Encourage moving forward
-        reward += forward_reward
-        if x[4] > 1.3:
-            reward -= 100
+        current_time = self.t*self.dt
+        #contacts = p.getContactPoints(bodyA=self.robot, bodyB=self.planeId)
+        done = False
+
+        # # Reward for staying close to the reference trajectory
+        # reference_diff = np.linalg.norm(np.min(np.abs(self.reference[self.t:self.t+10,:] - x[[7,8,10,11]]),axis=0))
+        # if reference_diff < 0.3:
+        #     reward += 0.3-reference_diff
+        # else:
+        #     reward -= 0.1*reference_diff
+        # # Reward to penalize falling
+
+        if x[4] > 1.4:
+            reward -= 1000
             done = True
-        elif x[4] < 0.9:
-            reward -= 100
+
+        elif x[4] < 1:
+            reward -= 1000
             done = True
+
         else:
-            reward += 1
-    
+            reward += 0.01
+        reward += x[3]
         # Reward for staying close to the reference speed
-        if np.abs(x[3] - self.reference_speed*current_time) < 0.25:
-            reward += 1
+        # if np.abs(x[3] - self.reference_speed*current_time) < 0.20:
+        #     reward += x[3]
+        # else:
+        #     reward -= np.abs(x[3] - self.reference_speed*current_time)
+
+        # if not contacts and x[4] > 1.3:
+        #     reward -= 100
+        #     done = True
+        #print(f"y_pos: {x[3]},z_pos: {x[4]} ,r_hip: {x[7]}, r_knee: {x[8]}, l_hip: {x[10]}, l_knee: {x[11]}")
         return reward, done
 
     def close(self):
@@ -200,14 +248,14 @@ class BipedEnv(gym.Env):
         padded_pred[:25,:] = predictions
 
         padded_time = np.fft.irfft(padded_pred, axis=0)
-        pred_time = padded_time[56:-56,:]
-        #upsample from 100 hz to 240 hz
+        pred_time = padded_time[106:-106,:]
+        #upsample from 100 hz to 1/dt hz
         if self.dt < 0.01:
-            num_samples = int(400 * 2.4)  # 960
+            num_samples = int(300 * (int(1/self.dt) / 100))  # 960
             # Upsample using Fourier method
             pred_time = resample(pred_time, num_samples, axis=0)
 
-        pred_time = np.repeat(pred_time, 10, axis=0)
+        pred_time = np.repeat(pred_time, 5, axis=0)
 
         return pred_time
 
