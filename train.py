@@ -12,31 +12,33 @@ class RewardLoggerCallback(BaseCallback):
         self.log_file = log_file
         self.episode_rewards = []
         self.current_episode_reward = 0
+        self.current_step = 0  # Track the number of steps in the current episode
 
         # Create the log file if it doesn't exist
         if not os.path.exists(self.log_file):
             with open(self.log_file, 'w') as f:
-                f.write("Episode,Total Reward\n")
+                f.write("Episode,Total Reward,Termination Step\n")
 
     def _on_step(self) -> bool:
-        # Check if the episode has ended by using `done`
+        # Check if the episode has ended
         dones = self.locals["dones"]
         rewards = self.locals["rewards"]
 
         # Accumulate rewards for the current episode
         self.current_episode_reward += rewards[0]
+        self.current_step += 1  # Increment step count for the current episode
 
-        # If the episode is done, log the reward
+        # If the episode is done, log the reward and termination step
         if dones[0]:
             self.episode_rewards.append(self.current_episode_reward)
             with open(self.log_file, 'a') as f:
-                
-                f.write(f"{len(self.episode_rewards)},{self.current_episode_reward}\n")
-            # Reset the reward counter for the next episode
+                f.write(f"{len(self.episode_rewards)},{self.current_episode_reward},{self.current_step}\n")
+            
+            # Reset counters for the next episode
             self.current_episode_reward = 0
+            self.current_step = 0
 
         return True
-
     def _on_training_end(self) -> None:
         # Optionally summarize results at the end of training
         print("Training finished. Total episodes:", len(self.episode_rewards))
@@ -63,13 +65,13 @@ class CustomCheckpointCallback(BaseCallback):
         return True
 
 # Usage
-total_timesteps = 3000000
-namelist = ["sac_bpd2d_256_poscontrolnoref"]
+total_timesteps = 30000000
+namelist = ["ppo_acd6_initref_1khz"]
 for i in range(len(namelist)):
     print(f"Training model {i}")
     rewar_Logger_name = namelist[i]+".csv"
     checkpoint_name = namelist[i]+".zip"
-    weight_file_name = "sac"+namelist[i]
+    weight_file_name = "final_"+namelist[i]
     use_past_weights = False
     past_weight_path = "weights/model_checkpoint_"+namelist[i]+".zip"
     init_no = 1
@@ -86,16 +88,12 @@ for i in range(len(namelist)):
 
     callbacks = CallbackList([checkpoint_callback, reward_logger])
 
-    if i == 0:
-        env = BipedEnv(render_mode=None,control='position')
-    elif i == 1:
-        env = BipedEnv(render_mode=None,control='torque',action_dim=6)
-    else:
-        env = BipedEnv(render_mode=None,control='torque',action_dim=7)
+    env = BipedEnv(render_mode=None,control='torque',action_dim=6)
 
-    policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256], qf=[256, 256]))
+
+    policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
     print("Starting training")
-    model = SAC(
+    model = PPO(
         "MlpPolicy",
         env,
         policy_kwargs=policy_kwargs,

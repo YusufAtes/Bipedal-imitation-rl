@@ -4,16 +4,19 @@ from gymnasium import spaces
 import torch
 from gait_generator_net import SimpleFCNN
 from scipy.signal import resample
+import matplotlib.pyplot as plt
+from animatebiped import animate_biped
+
 class BipedEnv(gym.Env):
     def __init__(self,render=False, render_mode= None):
         super(BipedEnv, self).__init__()
-        self.initialized = 0
-        self.M = 48
+        self.initialized = 1
+        self.M   = 48
         self.m_1 = 7
         self.m_2 = 4
         self.l_1 = 0.5
         self.l_2 = 0.6
-        self.g = 9.8
+        self.g   = 9.8
         self.b_1 = 10.0
         self.b_2 = 10.0
         self.b_k = 1000.0
@@ -24,27 +27,35 @@ class BipedEnv(gym.Env):
         self.l_2_2 = self.l_2 / 2
         self.ramp_angle = 0
         self.roughness_multiplier = 0
-
+        self.render_mode = render_mode
         self.I_1 =self.m_1 * self.l_1**2 / 12
         self.I_2 = self.m_2 * self.l_2**2 / 12
         self.MInv = 1 / self.M
         self.m_1Inv = 1 / self.m_1
         self.m_2Inv = 1 / self.m_2
-        self.max_steps = 50000
-        self.action_space = spaces.Box(low=-10, high=10, shape=(6,), dtype=np.float32)
+        self.max_steps = 5e4
+        self.action_space = spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)
         self.observation_space = spaces.Box(low=-200, high=200, shape=(30,), dtype=np.float32)
         self.t = 0
-        self.dt = 0.0001
+        self.dt = 1e-4
         self.gaitgen_net = SimpleFCNN()
-        self.gaitgen_net.load_state_dict(torch.load('model_hs512_lpmse_bs64_epoch1000_fft.pth',weights_only=True))
-        self.normalizationconst = np.load(rf"normalization_constants.npy")
+        self.gaitgen_net.load_state_dict(torch.load('ref_gait_results/tagamodel_hs512_lr0.0001_bs32_epochs10000_val0.0139.pth',weights_only=True))
+        self.gaitgen_net.eval()
+        self.normalizationconst = np.load(rf"gait reference fft_5.00/newnormalization_constants.npy")
+        self.max_torque = 500
+        torch.device('cpu')
         #x,dx are the states
         #torques are the actions
 
     def reset(self,seed=None):
         # Reset the state of the environment to an initial state
+        self.alive_weight = 0.8
+        self.forward_weight = 0.1
+        self.reference_weight = 0.1
+
         self.initialized +=1
         self.t = 0
+        self.reference_idx = 0
         selected_speed = np.random.rand()*3
         self.reference_speed = selected_speed
         self.ramp_angle = 0
@@ -52,25 +63,33 @@ class BipedEnv(gym.Env):
         right_len = self.l_1 + self.l_2
         left_len = self.l_1 + self.l_2
         encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
-        encoder_vec[0] = selected_speed/3
-        encoder_vec[1] = right_len
-        encoder_vec[2] = left_len
+        encoder_vec[0] = selected_speed / 3
+        encoder_vec[1] = right_len      /1.5
+        encoder_vec[2] = left_len       /1.5
         encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
         self.reference = self.findgait(encoder_vec)                     #Find the gait
-        self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)     #Clip the gait
+        self.reference = self.reference[:,:4]                           #Exclude the torso calculation
+        self.reference = np.clip(self.reference, -np.pi/2, np.pi/2) 
+        if self.render_mode == 'animate':
+            animate_biped(self.reference[::50],'reference.gif')
+            print('animation saved')
+            print("Speed: ", selected_speed)
         self.reference[:,1] = self.reference[:,1] + self.reference[:,0] #adjust for angle arrangment
         self.reference[:,3] = self.reference[:,3] + self.reference[:,2]
-        distances = np.linalg.norm(self.reference[:int(1/self.dt)], axis=1)
-        closest_idx = np.argmin(distances)                              #Starting point of the gait
-        self.reference = self.reference[closest_idx:,:]
         self.reference = np.pi/2 - self.reference
         x = np.zeros((14))
         x[0] = 0
         x[1] = 1.09
+
         x[4] = 0.45 * np.pi
         x[10] = 0.45 * np.pi
         x[7] = 0.57 * np.pi
         x[13] = 0.57 * np.pi
+        
+        
+        distances = np.linalg.norm(self.reference[:3200,:] - x[[4,10,7,13]],axis=1)
+        closest_idx = np.argmin(distances)                              #Starting point of the gait
+        self.reference = self.reference[closest_idx:,:]
 
         # Calculate other values based on the equations
         x[2] = x[0] + self.l_1 * np.cos(x[4]) / 2
@@ -87,10 +106,11 @@ class BipedEnv(gym.Env):
         self.state_dx = np.zeros(14)
         self.state = np.concatenate([self.state_x, self.state_dx])
         self.reset_info = {}
+        
         return self.state, self.reset_info
 
     def step(self,torques):
-
+        torques = torques * self.max_torque
         x = self.state[2:16]
         dx = self.state[16:]
         self.t += 1
@@ -243,57 +263,41 @@ class BipedEnv(gym.Env):
         self.state[2:16] = x
         self.state[16:] = dx
         #force = np.array([F_g_1, F_g_2, F_g_3, F_g_4])
-
         reward, done = self.biped_reward(self.state[2:16], self.state[16:],torques)
         info = {}
         truncated = False
         if self.t == self.max_steps:
             truncated = True
         return self.state, reward, done, truncated, info
-
-    # def biped_reward(self,x, dx,torques):
-    #     done = False
-    #     reward = 0
-    #     current_step = (self.t) * self.dt
-    #     if self.t  < self.max_steps:
-    #         reward -=  0.5* np.mean(np.linalg.norm(self.reference[self.t:self.t+5,:] - x[[4,10,7,13]]))
-
-    #     if x[1] < 0.9:
-    #         reward -= 100
-    #         done = True
-    #     else:
-    #         reward += 0.1
     
-    #     # include speed reward something like
-    #     reward -= (np.abs(x[0] - self.reference_speed * current_step))
-    #     return reward, done
     def biped_reward(self,x,dx,torques):
-
-        reward = 0
-        current_time = self.t*self.dt
-        #contacts = p.getContactPoints(bodyA=self.robot, bodyB=self.planeId)
         done = False
+        reward = 0
+        if self.initialized % 200 == 0:
+            weight_increase = self.alive_weight*0.1
+            self.alive_weight = self.alive_weight*0.9
+            self.forward_weight = self.forward_weight + weight_increase/2
+            self.reference_weight = self.reference_weight + weight_increase/2
 
-        # # Reward for staying close to the reference trajectory
-        # reference_diff = np.linalg.norm(np.min(np.abs(self.reference[self.t:self.t+10,:] - x[[4,10,7,13]]),axis=0))
-        # if reference_diff < 0.3:
-        #     reward += 0.3-reference_diff
-        # else:
-        #     reward -= 0.1*reference_diff
-        # Reward to penalize falling
-
-        if x[1] < 0.9:
-            reward -= 1000
+        if x[1] > 0.9:
+            reward += self.alive_weight
+        else:
             done = True
 
+        if dx[0] > 0:
+            reward +=self.forward_weight
         else:
-            reward += 0.01
-        reward += x[0]
-        # # Reward for staying close to the reference speed
-        # if np.abs(x[0] - self.reference_speed*current_time) < 0.20:
-        #     reward += x[0]
-        # else:
-        #     reward -= np.abs(x[0] - self.reference_speed*current_time)
+            reward -=self.forward_weight
+
+        if self.t%10 == 0:
+            self.reference_idx +=1
+
+        reference_diff = np.linalg.norm(self.reference[self.reference_idx,:] - x[[4,10,7,13]])
+        if reference_diff < 0.5:
+            reward += self.reference_weight
+        else:
+            reward -= self.reference_weight
+
         return reward, done
     
     def close(self):
@@ -323,7 +327,7 @@ class BipedEnv(gym.Env):
     def findgait(self,input_vec):
 
         freqs = self.gaitgen_net(input_vec)
-        predictions = freqs.reshape(-1,2,25,4)
+        predictions = freqs.reshape(-1,4,2,17)
         predictions = predictions.detach().numpy()
         predictions = predictions[0]
         predictions = self.denormalize(predictions)
@@ -332,39 +336,69 @@ class BipedEnv(gym.Env):
         return pred_time
 
     def denormalize(self,pred):
-
-        pred[0,:,0] = pred[0,:,0] * self.normalizationconst[0]
-        pred[0,:,1] = pred[0,:,1] * self.normalizationconst[1]
-        pred[0,:,2] = pred[0,:,2] * self.normalizationconst[2]
-        pred[0,:,3] = pred[0,:,3] * self.normalizationconst[3]
-        pred[1,:,0] = pred[1,:,0] * self.normalizationconst[4]
-        pred[1,:,1] = pred[1,:,1] * self.normalizationconst[5]
-        pred[1,:,2] = pred[1,:,2] * self.normalizationconst[6]
-        pred[1,:,3] = pred[1,:,3] * self.normalizationconst[7]
-        
+        #form is [5,2,17]
+        for i in range(17):
+            for k in range(2):
+                pred[:,k,i] = pred[:,k,i] * self.normalizationconst[i*2+k]
         return pred
+    
+    # def denormalize(self,pred):
+    #     #form is [5,2,17]
+    #     pred[0,0,:] = pred[0,0,:] * self.normalizationconst[0]
+    #     pred[0,1,:] = pred[0,1,:] * self.normalizationconst[1]
+    #     pred[1,0,:] = pred[1,0,:] * self.normalizationconst[2]
+    #     pred[1,1,:] = pred[1,1,:] * self.normalizationconst[3]
+    #     pred[2,0,:] = pred[2,0,:] * self.normalizationconst[4]
+    #     pred[2,1,:] = pred[2,1,:] * self.normalizationconst[5]
+    #     pred[3,0,:] = pred[3,0,:] * self.normalizationconst[6]
+    #     pred[3,1,:] = pred[3,1,:] * self.normalizationconst[7]
+    #     pred[4,0,:] = pred[4,0,:] * self.normalizationconst[8]
+    #     pred[4,1,:] = pred[4,1,:] * self.normalizationconst[9]
+
+    #     return pred
         
 
     def pred_ifft(self,predictions):
-
-        real_pred = predictions[0,:,:]
-        imag_pred = predictions[0,:,:]
+        #form is [5,2,17]
+        real_pred = predictions[:,0,:]
+        imag_pred = predictions[:,1,:]
         predictions = real_pred + 1j*imag_pred
 
-        padded_pred = np.zeros((257,4),dtype=complex)
-        padded_pred[:25,:] = predictions
+        pred_time = np.fft.irfft(predictions, axis=1)
+        pred_time = pred_time.transpose(1,0)
+        org_rate = 10
 
-        padded_time = np.fft.irfft(padded_pred, axis=0)
-        pred_time = padded_time[106:-106,:]
-        #upsample from 100 hz to 1/dt hz
-        if self.dt < 0.01:
-            num_samples = int(300 * (int(1/self.dt) / 100))  # 960
+        if self.dt < 0.1:
+            num_samples = int((pred_time.shape[0]) * (1/self.dt)/(org_rate*10))  # resample with self.dt
             # Upsample using Fourier method
             pred_time = resample(pred_time, num_samples, axis=0)
-
-        pred_time = np.repeat(pred_time, 10, axis=0)
-
+        pred_time = np.tile(pred_time, (int(self.max_steps*self.dt),1))    # Create loop for reference movement
         return pred_time
+        
+    def control_reference(self,pred_time):
+        degtorad = 180/np.pi    
+        plt.figure(figsize=(10,8))
+        plt.subplot(2,2,1)
+        plt.plot(pred_time[:,0]*degtorad )
+        plt.title('Right Hip')
+        plt.legend(['Predicted'])
+        plt.subplot(2,2,2)
+        plt.plot(pred_time[:,1]*degtorad )
+        plt.title('Right Knee')
+        plt.legend(['Predicted'])
+        plt.subplot(2,2,3)
+        plt.plot(pred_time[:,2]*degtorad )
+        plt.title('Left Hip')
+        plt.legend(['Predicted'])
+        plt.subplot(2,2,4)
+        plt.plot(pred_time[:,3]*degtorad )
+        plt.title('Left Knee')
+        plt.legend(['Predicted'])
+        plt.savefig(f"gaitgentest.png")
+        plt.close()
+        print('plots saved')
+
+
 
 #     # Define action and observation space
 #     # They must be gym.spaces objects
