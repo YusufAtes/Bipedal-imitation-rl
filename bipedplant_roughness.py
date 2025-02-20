@@ -34,7 +34,7 @@ class BipedEnv(gym.Env):
         self.m_1Inv = 1 / self.m_1
         self.m_2Inv = 1 / self.m_2
         self.max_steps = 5e4
-        self.action_space = spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-1000, high=1000, shape=(6,), dtype=np.float32)
         self.observation_space = spaces.Box(low=-200, high=200, shape=(30,), dtype=np.float32)
         self.t = 0
         self.dt = 1e-4
@@ -49,17 +49,21 @@ class BipedEnv(gym.Env):
 
     def reset(self,seed=None):
         # Reset the state of the environment to an initial state
-        self.alive_weight = 0.8
-        self.forward_weight = 0.1
-        self.reference_weight = 0.1
+
+        self.alive_weight = 0.3
+        self.forward_weight = 0.2
+        self.reference_weight = 0.3
+        self.hip_weight = 0.1
+        self.torso_weight = 0.1
 
         self.initialized +=1
         self.t = 0
         self.reference_idx = 0
         selected_speed = np.random.rand()*3
         self.reference_speed = selected_speed
-        self.ramp_angle = 0
+        self.ramp_angle = np.random.uniform(-2, 2) * np.pi / 180
         self.rough_terrain_array = np.random.rand(200)*self.roughness_multiplier
+
         right_len = self.l_1 + self.l_2
         left_len = self.l_1 + self.l_2
         encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
@@ -69,14 +73,16 @@ class BipedEnv(gym.Env):
         encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
         self.reference = self.findgait(encoder_vec)                     #Find the gait
         self.reference = self.reference[:,:4]                           #Exclude the torso calculation
-        self.reference = np.clip(self.reference, -np.pi/2, np.pi/2) 
+
         if self.render_mode == 'animate':
             animate_biped(self.reference[::50],'reference.gif')
             print('animation saved')
             print("Speed: ", selected_speed)
+        
         self.reference[:,1] = self.reference[:,1] + self.reference[:,0] #adjust for angle arrangment
         self.reference[:,3] = self.reference[:,3] + self.reference[:,2]
         self.reference = np.pi/2 - self.reference
+
         x = np.zeros((14))
         x[0] = 0
         x[1] = 1.09
@@ -110,15 +116,15 @@ class BipedEnv(gym.Env):
         return self.state, self.reset_info
 
     def step(self,torques):
-        torques = torques * self.max_torque
+
         x = self.state[2:16]
         dx = self.state[16:]
         self.t += 1
 
-        x[4] = x[4] % (2*np.pi)
-        x[7] = x[7] % (2*np.pi)
-        x[10] = x[10] % (2*np.pi)
-        x[13] = x[13] % (2*np.pi)
+        # x[4] = x[4] % (2*np.pi)
+        # x[7] = x[7] % (2*np.pi)
+        # x[10] = x[10] % (2*np.pi)
+        # x[13] = x[13] % (2*np.pi)
 
         sin_x5  =np.sin(x[4])
         cos_x5  =np.cos(x[4])
@@ -184,7 +190,7 @@ class BipedEnv(gym.Env):
             y_d = y_g_x_r - y_r
             hh = y_d / np.sin(x[10])
             x_d = min(self.l_2, hh) * np.cos(x[10])
-            F_g_1 = -self.k_g * x_d - self.b_g * (dx[9] - l_2_2_sin_x11 * dx[10])
+            F_g_1 = -self.k_g * x_d - self.b_g * (dx[8] - l_2_2_sin_x11 * dx[10])
             F_g_2 = -self.k_g * (y_r - y_g_x_r) + self.b_g * np.max(-(dx[9] - l_2_2_cos_x11 * dx[10]),0)
         else:
             F_g_1, F_g_2 = 0, 0
@@ -198,12 +204,12 @@ class BipedEnv(gym.Env):
             hh = y_d / np.sin(x[13])
             x_d = min(self.l_2, hh) * np.cos(x[13])
             F_g_3 = -self.k_g * x_d - self.b_g * (dx[11] - l_2_2_sin_x14 * dx[13])
-            F_g_4 = -self.k_g * (y_l - y_g_x_l) + self.b_g * np.max(-(dx[13] - l_2_2_cos_x14 * dx[13]),0)
+            F_g_4 = -self.k_g * (y_l - y_g_x_l) + self.b_g * np.max(-(dx[12] - l_2_2_cos_x14 * dx[13]),0)
         else:
             F_g_3, F_g_4 = 0, 0
 
-        f_x5_x11 = max(0, x[4] - x[10])
-        f_x8_x14 = max(0, x[7] - x[13])
+        f_x5_x11 = np.max([0., x[4] - x[10]])
+        f_x8_x14 = np.max([0., x[7] - x[13]])
 
         h_x5_x11 = self.h(x[4] - x[10])
         h_x8_x14 = self.h(x[7] - x[13])
@@ -223,10 +229,10 @@ class BipedEnv(gym.Env):
             -self.g,
             0,
             -self.g,
-            (-self.b_1 * abs(x[4] - np.pi / 2) * dx[4] - (self.b_2 + self.b_k * f_x5_x11) * (dx[4] - dx[10]) - self.k_k * h_x5_x11 + T_r1_y + T_r3_y) / self.I_1,
+            (-self.b_1 * np.abs(x[4] - np.pi / 2) * dx[4] - (self.b_2 + self.b_k * f_x5_x11) * (dx[4] - dx[10]) - self.k_k * h_x5_x11 + T_r1_y + T_r3_y) / self.I_1,
             0,
             -self.g,
-            (-self.b_1 * abs(x[7] - np.pi / 2) * dx[7] - (self.b_2 + self.b_k * f_x8_x14) * (dx[7] - dx[13]) - self.k_k * h_x8_x14 + T_r2_y + T_r4_y) / self.I_1,
+            (-self.b_1 * np.abs(x[7] - np.pi / 2) * dx[7] - (self.b_2 + self.b_k * f_x8_x14) * (dx[7] - dx[13]) - self.k_k * h_x8_x14 + T_r2_y + T_r4_y) / self.I_1,
             F_g_1 / self.m_2,
             F_g_2 / self.m_2 - self.g,
             (-F_g_1 * l_2_2_sin_x11 - F_g_2 * l_2_2_cos_x11 - (self.b_2 + self.b_k * f_x5_x11) * (dx[10] - dx[4]) + self.k_k * h_x5_x11 - T_r3_y - T_r5_x_dx_y) / self.I_2,
@@ -259,45 +265,62 @@ class BipedEnv(gym.Env):
         d2x = P_x @ np.linalg.solve((C_x @ P_x), temp_8x1) + Q_x_dx_y_F_g  # (14x1)
         dx = dx + self.dt * d2x
         x = x + self.dt * dx
-        x[[4,10,7,13]] = x[[4,10,7,13]] % (2*np.pi)
+
         self.state[2:16] = x
         self.state[16:] = dx
         #force = np.array([F_g_1, F_g_2, F_g_3, F_g_4])
-        reward, done = self.biped_reward(self.state[2:16], self.state[16:],torques)
+        reward, done = self.biped_reward(self.state[2:16], self.state[16:])
         info = {}
         truncated = False
         if self.t == self.max_steps:
             truncated = True
         return self.state, reward, done, truncated, info
     
-    def biped_reward(self,x,dx,torques):
+    
+    def biped_reward(self,x,dx):
         done = False
         reward = 0
-        if self.initialized % 200 == 0:
-            weight_increase = self.alive_weight*0.1
-            self.alive_weight = self.alive_weight*0.9
-            self.forward_weight = self.forward_weight + weight_increase/2
-            self.reference_weight = self.reference_weight + weight_increase/2
 
-        if x[1] > 0.9:
-            reward += self.alive_weight
-        else:
+        self.alive_weight = 0.1
+        self.hip_weight = 0.1
+
+        self.forward_weight = 0.2
+        self.reference_weight = 0.2
+        
+        # Conditions for early termination regarding stability
+
+        #Conditions for angle limits
+        if   (x[4] > np.pi or x[7] > np.pi or x[10] > np.pi or x[13] > np.pi):
             done = True
-
-        if dx[0] > 0:
-            reward +=self.forward_weight
+        elif (x[4] < 0 or  x[7] < 0 or x[10] < 0 or x[13] < 0):
+            done = True
         else:
-            reward -=self.forward_weight
+            reward += self.hip_weight   # 0.1
 
-        if self.t%10 == 0:
+        #Falling Control
+        if (x[1] > 1.3 or x[1] < 0.9):
+            done = True
+        else:
+            reward += self.alive_weight # 0.3
+
+        #Condition for forward movement
+        if 2 > dx[0] > 0.01: 
+            reward += dx[0] * self.forward_weight
+        elif dx[0] > 2:
+            reward += self.forward_weight
+
+        if -0.1 > dx[1] > 0.1:
+            reward += 0.1 - np.abs(dx[1])
+
+        #Reference tracking indexing
+        if self.t%100 == 0:
             self.reference_idx +=1
 
         reference_diff = np.linalg.norm(self.reference[self.reference_idx,:] - x[[4,10,7,13]])
-        if reference_diff < 0.5:
-            reward += self.reference_weight
-        else:
-            reward -= self.reference_weight
+        #Condition for reference tracking
 
+        if reference_diff < 1:
+            reward += (1 - reference_diff) * self.reference_weight
         return reward, done
     
     def close(self):
@@ -369,7 +392,7 @@ class BipedEnv(gym.Env):
         org_rate = 10
 
         if self.dt < 0.1:
-            num_samples = int((pred_time.shape[0]) * (1/self.dt)/(org_rate*10))  # resample with self.dt
+            num_samples = int((pred_time.shape[0]) * (1/self.dt)/(org_rate*100))  # resample with self.dt
             # Upsample using Fourier method
             pred_time = resample(pred_time, num_samples, axis=0)
         pred_time = np.tile(pred_time, (int(self.max_steps*self.dt),1))    # Create loop for reference movement

@@ -34,24 +34,25 @@ for i in range(num_joints):
     joint_name = joint_info[1].decode('utf-8')  # Decode joint name
     print(f"Joint ID: {i}, Joint Name: {joint_name}")
 time.sleep(1)
-p.setJointMotorControl2(robot,joint_id, p.VELOCITY_CONTROL, force=0)
-p.enableJointForceTorqueSensor(robot, joint_id)
-# p.setTimeStep(1/1000)
-print('==========================')
-for i in range(1000):
-    # p.setJointMotorControl2(robot, joint_id, p.TORQUE_CONTROL, force=-200)
-    # p.setJointMotorControlArray(robot, joint_idx, controlMode=p.TORQUE_CONTROL, forces=[-200])
-    p.setJointMotorControlArray(robot, [5], controlMode=p.POSITION_CONTROL,targetPositions=[1])
-    p.stepSimulation()
-    a = p.getContactPoints(robot, planeId)
-    time.sleep(0.01)
-print('Simulation done')
-time.sleep(3)
-# # Print joint names and IDs
-# print("Joint Information:")
-# for joint_id in range(num_joints):
-#     joint_info = p.getJointInfo(robot, joint_id)
-#     joint_name = joint_info[1].decode('utf-8')  # Decode joint name
-#     print(f"Joint ID: {joint_id}, Joint Name: {joint_name}")
-#     if joint_info[2] == p.JOINT_REVOLUTE:  # Ensure it's a revolute joint
-#         p.setJointMotorControl2(robot, joint_id, p.POSITself.planeId = p.loadURDF("assets/pla
+# p.setJointMotorControl2(robot,joint_id, p.VELOCITY_CONTROL, force=0)
+# p.enableJointForceTorqueSensor(robot, joint_id)
+# # p.setTimeStep(1/1000)
+# print('==========================')
+# for i in range(1000):
+#     # p.setJointMotorControl2(robot, joint_id, p.TORQUE_CONTROL, force=-200)
+#     # p.setJointMotorControlArray(robot, joint_idx, controlMode=p.TORQUE_CONTROL, forces=[-200])
+#     p.setJointMotorControl2(robot, 2, controlMode=p.POSITION_CONTROL,targetPosition=0.3)
+#     p.stepSimulation()
+#     a = p.getContactPoints(robot, planeId)
+#     print(a[0])
+#     time.sleep(0.01)
+# print('Simulation done')
+# time.sleep(3)
+# # # Print joint names and IDs
+# # print("Joint Information:")
+# # for joint_id in range(num_joints):
+# #     joint_info = p.getJointInfo(robot, joint_id)
+# #     joint_name = joint_info[1].decode('utf-8')  # Decode joint name
+# #     print(f"Joint ID: {joint_id}, Joint Name: {joint_name}")
+# #     if joint_info[2] == p.JOINT_REVOLUTE:  # Ensure it's a revolute joint
+# #         p.setJointMotorControl2(robot, joint_id, p.POSITself.planeId = p.loadURDF("assets/pla

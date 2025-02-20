@@ -98,9 +98,9 @@ class CustomCheckpointCallback(BaseCallback):
 # Usage
 total_timesteps = 30000000
 
-rewar_Logger_name ="PPOtaga_adapreward.csv"
-checkpoint_name = "PPOtaga_adapreward.zip"
-weight_file_name = "PPO_taga_adapreward"
+rewar_Logger_name ="ppo_taga_reward.csv"
+checkpoint_name = "ppo_taga_.zip"
+weight_file_name = "PPO_taga"
 use_past_weights = False
 past_weight_path = "weights/model_checkpoint_2PPOtaga_adapreward.zip"
 init_no = 2
@@ -117,7 +117,7 @@ reward_logger = RewardLoggerCallback(log_file=rewar_Logger_name)
 
 callbacks = CallbackList([checkpoint_callback, reward_logger])
 env = BipedEnv(render_mode='None')
-policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
+policy_kwargs = dict(net_arch=dict(pi=[512, 256], vf=[512, 256]))
 print("Starting training")
 
 model = PPO(

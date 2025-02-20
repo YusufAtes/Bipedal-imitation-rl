@@ -42,7 +42,7 @@
     <parent link="world"/>
     <child link="y_prismatic"/>
     <axis xyz="0 1 0"/>
-    <limit effort="0.0" lower="1" upper="-1" velocity="1000.0"/>
+    <limit effort="0.0" lower="1" upper="-1" velocity="20.0"/>
     <origin rpy="0 0 0" xyz="0 0 0"/>
   </joint>
 		
@@ -58,14 +58,15 @@
     <parent link="y_prismatic"/>
     <child link="z_prismatic"/>
     <axis xyz="0 0 1"/>
-     <limit effort="0.0" lower="1" upper="-1" velocity="1000.0"/>
+     <limit effort="0.0" lower="1" upper="-1" velocity="20.0"/>
     <origin rpy="0 0 0" xyz="0 0 0"/>
   </joint>
 	
-	<joint name="torso_to_z" type="continuous">
+	<joint name="torso_to_z" type="revolute">
     <parent link="z_prismatic"/>
     <child link="torso"/>
     <axis xyz="1 0 0"/>
+      <limit effort="500.0" lower="-0.4" upper="0.1" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="0 0 0"/>
   </joint>
 	
@@ -118,7 +119,7 @@
     <parent link="torso"/>
     <child link="r_upperleg"/>
     <axis xyz="1 0 0"/>
-    <limit effort="1000.0" lower="-1.77." upper="1.77" velocity="1000.0"/>
+    <limit effort="500.0" lower="-1.57." upper="1.57" velocity="15.0"/>
     <origin rpy="0 0 0" xyz="0.1 0 -0.24"/>
   </joint>
   
@@ -149,7 +150,7 @@
     <parent link="torso"/>
     <child link="l_upperleg"/>
     <axis xyz="1 0 0"/>
-    <limit effort="1000.0" lower="-1.77." upper="1.77" velocity="1000.0"/>
+    <limit effort="500.0" lower="-1.57." upper="1.57" velocity="15.0"/>
     <origin rpy="0 0 0" xyz="-0.1 0 -0.24"/>
   </joint>
 
@@ -180,7 +181,7 @@
     <parent link="r_upperleg"/>
     <child link="r_lowerleg"/>
     <axis xyz="1 0 0"/>
-    <limit effort="10.0" lower="-1.97." upper="0.1" velocity="1000.0"/>
+    <limit effort="300.0" lower="-1.57." upper="0.1" velocity="15.0"/>
     <origin rpy="0 0 0" xyz="0.015 0 -.45"/>
   </joint>
 
@@ -211,7 +212,7 @@
     <parent link="l_upperleg"/>
     <child link="l_lowerleg"/>
     <axis xyz="1 0 0"/>
-    <limit effort="10.0" lower="-1.97." upper="0.1" velocity="1000.0"/>
+    <limit effort="300.0" lower="-1.57." upper="0.1" velocity="15.0"/>
     <origin rpy="0 0 0" xyz="-0.015 0 -.45"/>
   </joint>
 
@@ -228,7 +229,7 @@
         <box size="0.06 0.185 .04"/>
       </geometry>
       <origin rpy="0 0 0" xyz="0.0 0.09 -0.03"/>
-      <contact_coefficients mu="0.65" />
+      <contact_coefficients mu="1.9" />
     </collision>
     <inertial>
       <mass value="1"/>
@@ -241,7 +242,7 @@
     <parent link="l_lowerleg"/>
     <child link="l_foot"/>
     <axis xyz="1 0 0"/>
-    <limit effort="10.0" lower="-1.6" upper="1." velocity="1000.0"/>
+    <limit effort="100.0" lower="-1." upper="0.5" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="-0.0 -0.035 -.45"/>
   </joint>
 
@@ -259,7 +260,7 @@
         <box size="0.06 0.185 .04"/>
       </geometry>
       <origin rpy="0 0 0" xyz="-0.0 0.09 -0.03"/>
-      <contact_coefficients mu="0.65" />
+      <contact_coefficients mu="1.9" />
     </collision>
     <inertial>
       <mass value="1"/>
@@ -272,7 +273,7 @@
     <parent link="r_lowerleg"/>
     <child link="r_foot"/>
     <axis xyz="1 0 0"/>
-    <limit effort="10.0" lower="-1.6" upper="1." velocity="1000.0"/>
+    <limit effort="100.0" lower="-1." upper="0.5" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="0.0 -0.035 -.45"/>
   </joint>
 
