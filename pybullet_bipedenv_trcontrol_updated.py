@@ -46,15 +46,16 @@ class BipedEnv(gym.Env):
         self.kp = np.array([ 0.1 ,  0.3,  0.2,  0.1,  0.3,  0.2,  0.1])
         self.kd = 0.1*self.kp
         self.state = np.zeros(61)
-        self.update_const = 0.7
+        self.update_const = 0.65
+
     def reset(self,seed=None):
         self.max_steps = int(3*(1/self.dt))
         self.t = 0
         self.init_no += 1
         self.p.resetSimulation(physicsClientId=self.physics_client)
         
-        self.reference_speed = 0.4 + np.random.rand()*2.6
-        self.ramp_angle = 0.0
+        self.reference_speed = 0.3 + np.random.rand()*2.7
+        self.ramp_angle = np.random.uniform(-3,3) *np.pi / 180
 
         encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
         encoder_vec[0] = self.reference_speed/3
@@ -76,10 +77,10 @@ class BipedEnv(gym.Env):
         self.past2_target_action = np.zeros(7)
 
         self.control_freq = 10
-        if self.render_mode == 'human':
-            print(self.reference_speed, self.ramp_angle)
         self.init_state()
         self.state, self.state_info = self.return_state()
+        if self.render_mode == 'human':
+            print(self.reference_speed, self.ramp_angle)
         return self.state, self.reset_info
 
     def step(self,torques):
@@ -106,6 +107,7 @@ class BipedEnv(gym.Env):
                 truncated = True
             if self.render_mode == 'human':
                 time.sleep(self.dt)
+                
             
         self.past_target_action = self.target_action
         self.past2_target_action = self.past_target_action
@@ -124,8 +126,10 @@ class BipedEnv(gym.Env):
 
         if not contact_points:
             reward -=1  * self.alive_weight
-        if len(contact_points) > 0:
-            reward +=1  * self.alive_weight * len(contact_points)
+        elif len(contact_points) > 2:
+            reward +=1   * self.alive_weight
+        else:
+            reward -=1  * self.alive_weight
         
         if x[3] < 0:
             reward -= 1 * self.forward_weight
@@ -137,9 +141,11 @@ class BipedEnv(gym.Env):
         else:
             reward += 1 * self.alive_weight
 
-        if x[4] > 1.4:
+        if x[4] > 1.5:
             reward -=1
             done = True
+        elif x[4] > 1.2:
+            reward -= self.alive_weight
         elif x[4] < 0.9:
             reward -=1
             done = True
@@ -150,22 +156,20 @@ class BipedEnv(gym.Env):
 
         joint_pos = x[[7,8,10,11]]
         ref_pos = x[[41,42,43,44]]
-        reward += np.exp(-np.linalg.norm(joint_pos - ref_pos)) 
+        reward += 1.5*np.exp(-5*np.linalg.norm(joint_pos - ref_pos)) 
 
         joint_vel = x[[35,36,38,39]]
         ref_vel = x[[57,58,59,60]]
         reward += 0.1* np.exp(-0.1*np.linalg.norm(joint_vel - ref_vel))
 
-        reward -= np.abs(x[6] +0.2)  * self.alive_weight
-        reward -= 1e-3 * np.abs(x[[37]])
-        reward -= 1e-3 * np.abs(x[[40]])
         reward -= 1e-3 * np.mean(np.abs(torques))
+        reward += x[3] * 1e-2
 
-        reward += x[3]/10
-        
-        reward += 1/(1-np.exp(- (self.t/400)))
-        if (np.abs(x[7]) < 0.2) and (np.abs(x[10]) < 0.2):
-            reward -= (np.abs(x[9] + x[8] + x[7]) + np.abs(x[10] + x[11] + x[12])) * self.ankle_weight
+        if x[10] < -0.3 and x [11] < -0.1:
+            reward -= x[12] * self.ankle_weight
+
+        if x[7] < -0.3 and x[8] < -0.1:
+            reward -= x[9] * self.ankle_weight
         return reward, done
     
     def close(self):
@@ -206,7 +210,8 @@ class BipedEnv(gym.Env):
             num_samples = int((pred_time.shape[0]) * (1/self.dt)/(org_rate))  # resample with self.dt
             # Upsample using Fourier method
             pred_time = resample(pred_time, num_samples, axis=0)
-        # pred_time = np.tile(pred_time, (int(self.max_steps*self.dt),1))    # Create loop for reference movement
+        if self.render_mode == 'human':
+            pred_time = np.tile(pred_time, (5,1))    # Create loop for reference movement
         return pred_time
 
     # def starting_height(self,rhip_pos,rknee_pos,lhip_pos,lknee_pos,r_flat):
@@ -222,15 +227,17 @@ class BipedEnv(gym.Env):
     #         knee_short = lower_len - (lower_len * np.cos(lhip_pos + lknee_pos))
     #         init_pos = 1.185 - hip_short - knee_short  
     #     return init_pos
+
     def starting_height(self,hip_init,knee_init):
-        upper_len = 0.45
-        lower_len = 0.45
+        upper_len = 0.42
+        lower_len = 0.42
         foot_len = 0.185
 
-        hip_short = upper_len - (upper_len * np.cos(hip_init))
+        hip_short = upper_len - (upper_len * np.cos(hip_init) )
         knee_short = lower_len - (lower_len * np.cos(hip_init + knee_init))
         init_pos = 1.185 - hip_short - knee_short 
         return init_pos
+    
     def ref_reward(self,rhip_diff, rknee_diff, lhip_diff, lknee_diff, rankle, lankle,rhip,lhip):
         reward = 0
         if rhip_diff < 0.26:
@@ -253,10 +260,8 @@ class BipedEnv(gym.Env):
         else:
             reward -= 1* self.reference_weight
 
-
         return reward
-    def custom_reward(self,x,torques):
-        pass
+
     def init_state(self):
 
         start_idx = 0
@@ -279,24 +284,16 @@ class BipedEnv(gym.Env):
 
         init_z = self.starting_height(hip_init,knee_init)
 
-        self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,init_z+0.01], self.p.getQuaternionFromEuler([0.,0.,0.]))
+        self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,init_z], self.p.getQuaternionFromEuler([0.,0.,0.]))
         self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0])
-        self.p.resetJointState(self.robot, 3, targetValue = hip_init)
+
+        self.p.resetJointState(self.robot, 3, targetValue = hip_init) 
         self.p.resetJointState(self.robot, 4, targetValue = knee_init)
-        self.p.resetJointState(self.robot, 5, targetValue = -(hip_init + knee_init))
-        # if left_flat:
-        #     self.p.resetJointState(self.robot, 5, targetValue = 0)
-        # else:
-        #     self.p.resetJointState(self.robot, 5, targetValue = -(rhip_pos+ rknee_pos))
-
+        self.p.resetJointState(self.robot, 5, targetValue = -(hip_init+ knee_init))
         self.p.resetJointState(self.robot, 6, targetValue = -hip_init)
-        self.p.resetJointState(self.robot, 7, targetValue = knee_init)
-        self.p.resetJointState(self.robot, 8, targetValue = -(-hip_init + knee_init))
+        self.p.resetJointState(self.robot, 7, targetValue = -knee_init)
+        self.p.resetJointState(self.robot, 8, targetValue = -(-hip_init-knee_init))
 
-        # if right_flat:
-        #     self.p.resetJointState(self.robot, 8, targetValue = 0)
-        # else:
-        #     self.p.resetJointState(self.robot, 8, targetValue = -(lhip_pos+lknee_pos))
 
         self.p.setGravity(0,0,-9.81)
         self.p.setTimeStep(self.dt)
@@ -309,15 +306,6 @@ class BipedEnv(gym.Env):
         self.t1_lknee_pos = self.p.getJointState(self.robot, 7)[0]
         self.t1_lankle_pos = self.p.getJointState(self.robot, 8)[0]
 
-    # def pd_controller(self,i):
-    #     action_error = self.target_action - self.current_action
-    #     if i == 0:
-    #         derivative = 0
-    #     else:
-    #         derivative = (action_error - self.past_action_error) / self.dt
-    #     self.current_action = self.kp*action_error + self.kd* derivative
-    #     self.past_action_error = action_error
-    #     return self.current_action
 
     def return_state(self):
 
@@ -347,7 +335,7 @@ class BipedEnv(gym.Env):
         ref_lknee_vel = (self.reference[self.reference_idx+self.t,3] - self.reference[self.reference_idx+self.t-1,3])/self.dt
 
         self.state[0] = self.reference_speed
-        self.state[1] = self.ramp_angle
+        self.state[1] = self.ramp_angle 
         self.state[2] = pos_x
         self.state[3] = pos_y
         self.state[4] = pos_z
