@@ -47,6 +47,8 @@ class BipedEnv(gym.Env):
         self.kd = 0.1*self.kp
         self.state = np.zeros(58)
         self.update_const = 0.7
+        self.action_noise_std = 0.5
+        self.enviroment_noise_std = 0.6
 
     def reset(self,seed=None):
         self.max_steps = int(3*(1/self.dt))
@@ -87,7 +89,7 @@ class BipedEnv(gym.Env):
         # Set torques
         self.target_action = torques * self.max_torque
         for i in range(10):
-            self.current_action = self.update_const*self.target_action + (1-self.update_const)*self.current_action
+            self.current_action = self.update_const*self.target_action + (1-self.update_const)*self.current_action #+ np.random.normal(0,self.action_noise_std,7) * self.max_torque
             self.t+=1
             self.p.setJointMotorControlArray(
                 bodyIndex=self.robot,
@@ -97,20 +99,21 @@ class BipedEnv(gym.Env):
                 physicsClientId=self.physics_client
             )
             # Step simulation
-            
             self.p.stepSimulation()
             
             # if self.render_mode == 'human':
             #     time.sleep(self.dt)
 
-        reward, done = self.biped_reward(self.state,torques=self.target_action)
+        self.past_target_action = self.target_action
+        self.past2_target_action = self.past_target_action
+        self.state, state_info = self.return_state()
+
+        reward, done = self.biped_reward(self.state,torques=self.current_action)
         truncated = False
 
         if self.t > self.max_steps:
             truncated = True
-        self.past_target_action = self.target_action
-        self.past2_target_action = self.past_target_action
-        self.state, state_info = self.return_state()
+
         return self.state, reward, done, truncated, state_info
 
     def biped_reward(self,x,torques):
@@ -356,7 +359,7 @@ class BipedEnv(gym.Env):
         self.state[4] = pos_z
         self.state[5] = y_vel
 
-        self.state[6:13] = [self.torso_pos, self.rhip_pos, self.rknee_pos, self.rankle_pos, self.lhip_pos, self.lknee_pos, self.lankle_pos]
+        self.state[6:13] = [self.torso_pos, self.rhip_pos, self.rknee_pos, self.rankle_pos, self.lhip_pos, self.lknee_pos, self.lankle_pos] #+ np.random.normal(0,self.enviroment_noise_std,7)
         self.state[13:20] = [self.past_target_action[0]/self.max_torque[0], self.past_target_action[1]/self.max_torque[1], self.past_target_action[2]/self.max_torque[2], 
                              self.past_target_action[3]/self.max_torque[3], self.past_target_action[4]/self.max_torque[4], self.past_target_action[5]/self.max_torque[5], 
                              self.past_target_action[6]/self.max_torque[6]]
@@ -382,7 +385,7 @@ class BipedEnv(gym.Env):
                                 self.reference[self.reference_idx+self.t+100,2], self.reference[self.reference_idx+self.t+100,3],
                                 self.reference[self.reference_idx+self.t+100,4], self.reference[self.reference_idx+self.t+100,5]]
         
-        self.state[52:58] = [ref_rhip_vel, ref_rknee_vel, ref_rankle_vel,ref_lhip_vel, ref_lknee_vel, ref_lankle_vel]
+        self.state[52:58] = [ref_rhip_vel, ref_rknee_vel, ref_rankle_vel,ref_lhip_vel, ref_lknee_vel, ref_lankle_vel] 
 
         self.t1_torso_pos = self.torso_pos
         self.t1_rhip_pos = self.rhip_pos
