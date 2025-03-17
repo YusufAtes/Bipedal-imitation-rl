@@ -64,14 +64,14 @@ class CustomCheckpointCallback(BaseCallback):
             if self.verbose > 0:
                 print(f"Model saved at step {self.n_calls} to {model_path}")
                 print(f"Time taken for this checkpoint: {time.time() - t0:.2f} seconds")
-                time.sleep(45)
+                time.sleep(15)
 
         return True
 
 # Usage
 
-total_timesteps = 10000000
-namelist = ["ppo_128_64_ent01"]
+total_timesteps = 4000000
+namelist = ["ppo_256_128"]
 
 for i in range(len(namelist)):
     rewar_Logger_name = namelist[i]+".csv"
@@ -102,7 +102,7 @@ for i in range(len(namelist)):
     env = BipedEnv(render_mode=None)
     env.reset()
 
-    policy_kwargs = dict(net_arch=dict(pi=[128, 64], vf=[128, 64]))
+    policy_kwargs = dict(net_arch=dict(pi=[256, 128], vf=[256, 128]))
     print("Starting training")
 
     model = PPO(
@@ -111,9 +111,9 @@ for i in range(len(namelist)):
         device="cpu",
         env=env,
         tensorboard_log="./"+namelist[i] +"/",
-        ent_coef=0.01,
+        ent_coef=0.001,
         learning_rate=1e-4,
-        clip_range=0.15,
+        clip_range=0.15
     )
 
     if use_past_weights:

@@ -1,0 +1,80 @@
+
+policy_kwargs = dict(net_arch=dict(pi=[128, 64], vf=[128, 64]))
+self.update_const = 0.7
+self.control_freq = 10
+ent_coef=0.01,
+learning_rate=1e-4,
+clip_range=0.15,
+ random_init = On (500)
+
+
+    def biped_reward(self,x,torques):
+
+        self.alive_weight = 0.2
+        self.forward_weight = 0.2
+        self.contact_weight = 0.05
+        done = False
+        reward = 0
+        contact_points = self.p.getContactPoints(self.robot, self.planeId)
+        # Conditions for early termination regarding stability
+
+        # if not contact_points:
+        #     reward -=1  * self.contact_weight
+        # # elif len(contact_points) > 2:
+        # #     reward +=1   * self.contact_weight
+        # else:
+        #     reward +=len(contact_points)  * self.contact_weight
+        
+        # if x[3] < 0:
+        #     reward -= 1 * self.forward_weight
+
+        # if (x[7] > 0.15) and (x[10] > 0.15):
+        #     reward -=1  * self.alive_weight
+        # elif (x[7] < -0.15) and (x[10] < -0.15):
+        #     reward -=1  * self.alive_weight
+        # else:
+        #     reward += 1 * self.alive_weight
+
+        if x[4] > 1.4:
+            reward -=10
+            done = True
+        elif x[4] > 1.2:
+            reward -= self.alive_weight
+        elif x[4] < 0.8:
+            reward -=10
+            done = True
+        elif x[4] < 1.0:
+            reward -= 1 * self.alive_weight
+        else:
+            reward += 1 * self.alive_weight
+
+        hip_joint_pos = x[[7,10]]
+        hip_ref_pos = x[[34,37]]
+        reward += np.exp(-5*np.linalg.norm(hip_joint_pos - hip_ref_pos))
+
+        knee_joint_pos = x[[8,11]]
+        knee_ref_pos = x[[35,38]]
+        reward += np.exp(-5*np.linalg.norm(knee_joint_pos - knee_ref_pos))
+
+        ankle_joint_pos = x[[9,12]]
+        ankle_ref_pos = x[[36,39]]
+        reward += np.exp(-5*np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
+
+        hip_joint_vel = x[[28,31]]
+        hip_ref_vel = x[[52,55]]
+        reward += 0.1*np.exp(-0.1*np.linalg.norm(hip_joint_vel - hip_ref_vel))
+
+        knee_joint_vel = x[[29,32]]
+        knee_ref_vel = x[[53,56]]
+        reward += 0.1*np.exp(-0.1*np.linalg.norm(knee_joint_vel - knee_ref_vel))
+
+        ankle_joint_vel = x[[30,33]]
+        ankle_ref_vel = x[[54,57]]
+        reward += 0.1 * np.exp(-0.1*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
+
+        reward -= 3e-3 * np.mean(np.abs(torques))
+        reward += x[3] * 1e-1
+
+        reward += np.exp(-5*np.linalg.norm(x[5] - x[0]))
+
+        return reward, done
