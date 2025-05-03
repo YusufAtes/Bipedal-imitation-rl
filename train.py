@@ -1,6 +1,7 @@
 # from pybullet_bipedenv_torquecontrolled import BipedEnv
-from pybullet_bipedenv_poscontrolled import POS_Biped
-from pybullett_bipedenv_trcontrol_ankle import BipedEnv
+# from pybullet_bipedenv_poscontrolled import POS_Biped
+# from pybullett_bipedenv_trcontrol_ankle import BipedEnv
+from pybullet_biped_7d_ppo13 import BipedEnv
 import os
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
@@ -8,6 +9,13 @@ from stable_baselines3 import PPO, SAC
 import time
 from typing import Callable
 from stable_baselines3.common.env_util import make_vec_env
+
+from typing import Callable
+def linear_schedule(initial_value: float) -> Callable[[float], float]:
+    def func(progress_remaining: float) -> float:
+        return progress_remaining * initial_value
+    return func
+
 t0 = time.time()
 class RewardLoggerCallback(BaseCallback):
     def __init__(self, log_file: str, verbose: int = 0):
@@ -70,8 +78,24 @@ class CustomCheckpointCallback(BaseCallback):
 
 # Usage
 
-total_timesteps = 4000000
-namelist = ["ppo_256_128"]
+# Define a function to create the environment
+def make_env():
+    def _init():
+        env = BipedEnv(render_mode=None)
+        # Optional: Add wrappers here if needed (e.g., Monitor)
+        # from stable_baselines3.common.monitor import Monitor
+        # env = Monitor(env)
+        return env
+    return _init
+
+# Number of parallel environments
+num_cpu = 4 # Adjust based on your CPU cores
+
+# Create the vectorized environment
+
+
+total_timesteps = 6000000
+namelist = ["ppo_256_256"]
 
 for i in range(len(namelist)):
     rewar_Logger_name = namelist[i]+".csv"
@@ -89,11 +113,11 @@ for i in range(len(namelist)):
 
     if use_past_weights:
         checkpoint_callback = CustomCheckpointCallback(
-            save_freq=1000000, save_path=namelist[i],init_no=init_no, verbose=1
+            save_freq=500000, save_path=namelist[i],init_no=init_no, verbose=1
         )
     else:
         checkpoint_callback = CustomCheckpointCallback(
-            save_freq=1000000, save_path=namelist[i], verbose=1
+            save_freq=500000, save_path=namelist[i], verbose=1
         )
     reward_logger = RewardLoggerCallback(log_file=rewar_Logger_name)
 
@@ -102,7 +126,7 @@ for i in range(len(namelist)):
     env = BipedEnv(render_mode=None)
     env.reset()
 
-    policy_kwargs = dict(net_arch=dict(pi=[256, 128], vf=[256, 128]))
+    policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
     print("Starting training")
 
     model = PPO(
@@ -111,14 +135,13 @@ for i in range(len(namelist)):
         device="cpu",
         env=env,
         tensorboard_log="./"+namelist[i] +"/",
-        ent_coef=0.001,
+        ent_coef=1e-3,
         learning_rate=1e-4,
-        clip_range=0.15
-    )
+        clip_range=0.15)
 
     if use_past_weights:
-        model = PPO.load(past_weight_path,device="cpu",ent_coef=0.01)
-        model.set_env(env)
+        # model = PPO.load(past_weight_path,device="cpu",ent_coef=0.01)
+        # model.set_env(env)
         print("Loaded past weights")
 
     model.learn(total_timesteps=total_timesteps, callback=callbacks)

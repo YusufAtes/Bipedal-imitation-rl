@@ -54,10 +54,10 @@ time.sleep(1)
 for i in range(1000):
     # p.setJointMotorControl2(robot, joint_id, p.TORQUE_CONTROL, force=-200)
     # p.setJointMotorControlArray(robot, joint_idx, controlMode=p.TORQUE_CONTROL, forces=[-200])
-    # p.setJointMotorControl2(robot, 2, controlMode=p.POSITION_CONTROL,targetPosition=0.3)
+    p.setJointMotorControl2(robot, 2, controlMode=p.TORQUE_CONTROL, force=1000)
     p.stepSimulation()
     a = p.getContactPoints(robot, planeId)
-    time.sleep(0.01)
+    time.sleep(0.1)
 # print('Simulation done')
 # time.sleep(3)
 # # # Print joint names and IDs

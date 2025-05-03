@@ -1,0 +1,12 @@
+Failed attempts: 6
+Total attempts: 6
+Success rate: 0.0
+Max speed: 0
+Demo cases: 
+   Speed Value  Angle  Ground Noise Mean Speed Success      Reward
+0     2.881851   -3.0         0.001          0   False  439.424772
+1     2.048271   -3.0         0.001          0   False  726.880282
+2     2.881851    3.0         0.001          0   False  576.808129
+3     2.048271    3.0         0.001          0   False  138.474855
+4     2.881851    6.0         0.001          0   False  183.634148
+5     2.048271    6.0         0.001          0   False  492.389101
