@@ -10,7 +10,7 @@ p.resetSimulation()  # Reset simulation
 
 # Set gravity
 p.setGravity(0, 0, -9.81)
-ramp_angle = 0 * np.pi / 180 # Random angle between -3 and 3
+ramp_angle = 2 * np.pi / 180 # Random angle between -3 and 3
 plane_orientation = p.getQuaternionFromEuler([ramp_angle, 0 , 0])
 # Load the plane
 planeId = p.loadURDF("assets/plane.urdf",baseOrientation=plane_orientation)
@@ -23,7 +23,20 @@ joint_idx = [2]
 cubeStartPos = [0, 0, 1.185]
 cubeStartOrientation = p.getQuaternionFromEuler([0., 0., 0.])
 robot = p.loadURDF("assets/biped2d.urdf", cubeStartPos, cubeStartOrientation)
+p.setJointMotorControlArray(robot,[0,1,2,3,4,5,6,7,8], p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0])
+hip_init = 0.4
+knee_init = -0.25
+p.resetJointState(robot, 3, targetValue = hip_init)
+p.resetJointState(robot, 4, targetValue = knee_init)
+p.resetJointState(robot, 5, targetValue = 0)
+# if left_flat:
+#     self.p.resetJointState(self.robot, 5, targetValue = 0)
+# else:
+#     self.p.resetJointState(self.robot, 5, targetValue = -(rhip_pos+ rknee_pos))
 
+p.resetJointState(robot, 6, targetValue = -hip_init)
+p.resetJointState(robot, 7, targetValue = knee_init)
+p.resetJointState(robot, 8, targetValue = 0)
 # cubeStartPos = [0, 0, -0.3]
 # cubeStartOrientation = p.getQuaternionFromEuler([0., 0., 0.])
 # robot = p.loadURDF("assets/biped2d_pybullet.urdf")
@@ -38,14 +51,13 @@ time.sleep(1)
 # p.enableJointForceTorqueSensor(robot, joint_id)
 # # p.setTimeStep(1/1000)
 # print('==========================')
-# for i in range(1000):
-#     # p.setJointMotorControl2(robot, joint_id, p.TORQUE_CONTROL, force=-200)
-#     # p.setJointMotorControlArray(robot, joint_idx, controlMode=p.TORQUE_CONTROL, forces=[-200])
-#     p.setJointMotorControl2(robot, 2, controlMode=p.POSITION_CONTROL,targetPosition=0.3)
-#     p.stepSimulation()
-#     a = p.getContactPoints(robot, planeId)
-#     print(a[0])
-#     time.sleep(0.01)
+for i in range(1000):
+    # p.setJointMotorControl2(robot, joint_id, p.TORQUE_CONTROL, force=-200)
+    # p.setJointMotorControlArray(robot, joint_idx, controlMode=p.TORQUE_CONTROL, forces=[-200])
+    # p.setJointMotorControl2(robot, 2, controlMode=p.POSITION_CONTROL,targetPosition=0.3)
+    p.stepSimulation()
+    a = p.getContactPoints(robot, planeId)
+    time.sleep(0.01)
 # print('Simulation done')
 # time.sleep(3)
 # # # Print joint names and IDs

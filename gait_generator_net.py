@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class SimpleFCNN(nn.Module):
-    def __init__(self, input_size=3, output_size=136, hidden_size=512):
+    def __init__(self, input_size=3, output_size=204, hidden_size=512):
         super(SimpleFCNN, self).__init__()
         # Layers
         self.fc1 = nn.Linear(input_size, hidden_size)

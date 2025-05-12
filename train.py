@@ -1,12 +1,13 @@
 # from pybullet_bipedenv_torquecontrolled import BipedEnv
 from pybullet_bipedenv_poscontrolled import POS_Biped
-from pybullet_bipedenv_trcontrol_updated import BipedEnv
+from pybullett_bipedenv_trcontrol_ankle import BipedEnv
 import os
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3 import PPO, SAC
 import time
-
+from typing import Callable
+from stable_baselines3.common.env_util import make_vec_env
 t0 = time.time()
 class RewardLoggerCallback(BaseCallback):
     def __init__(self, log_file: str, verbose: int = 0):
@@ -58,33 +59,41 @@ class CustomCheckpointCallback(BaseCallback):
         # Save the model every `save_freq` steps
         if self.n_calls % self.save_freq == 0:
             self.init_no +=1
-            model_path = f"weights_upt/model_checkpoint_{self.init_no}"+checkpoint_name
+            model_path = f"{self.save_path}/model_checkpoint_{self.init_no}"+checkpoint_name
             self.model.save(model_path)
             if self.verbose > 0:
                 print(f"Model saved at step {self.n_calls} to {model_path}")
                 print(f"Time taken for this checkpoint: {time.time() - t0:.2f} seconds")
-                time.sleep(45)
+                time.sleep(15)
 
         return True
 
 # Usage
-total_timesteps = 5000000
-namelist = ["ppo_upt_64_64_softupdate"]
+
+total_timesteps = 8000000
+namelist = ["ppo_512_256"]
+
 for i in range(len(namelist)):
     rewar_Logger_name = namelist[i]+".csv"
     checkpoint_name = namelist[i]+".zip"
     weight_file_name = "final_"+namelist[i]
     use_past_weights = False
-    past_weight_path = "weights_upt/model_checkpoint_7ppo_upt_256_256.zip"
-    init_no = 8
+
+    if os.path.exists(namelist[i]):
+        pass
+    else:
+        os.makedirs(namelist[i])
+    
+    past_weight_path = "weights_upt/model_checkpoint_2ppo_upt_128_64_softupdate_ramp.zip"
+    init_no = 3
 
     if use_past_weights:
         checkpoint_callback = CustomCheckpointCallback(
-            save_freq=1000000, save_path='./checkpoints/',init_no=init_no, verbose=1
+            save_freq=1000000, save_path=namelist[i],init_no=init_no, verbose=1
         )
     else:
         checkpoint_callback = CustomCheckpointCallback(
-            save_freq=1000000, save_path='./checkpoints/', verbose=1
+            save_freq=1000000, save_path=namelist[i], verbose=1
         )
     reward_logger = RewardLoggerCallback(log_file=rewar_Logger_name)
 
@@ -93,19 +102,24 @@ for i in range(len(namelist)):
     env = BipedEnv(render_mode=None)
     env.reset()
 
-    policy_kwargs = dict(net_arch=dict(pi=[64, 64], vf=[64, 64]))
+    policy_kwargs = dict(net_arch=dict(pi=[512, 256], vf=[512, 256]))
     print("Starting training")
+
     model = PPO(
         "MlpPolicy",
         policy_kwargs=policy_kwargs,
         device="cpu",
         env=env,
+        tensorboard_log="./"+namelist[i] +"/",
+        ent_coef=0.001,
+        learning_rate=1e-4,
+        clip_range=0.15,
+        batch_size=64
     )
+
     if use_past_weights:
-        model = PPO.load(past_weight_path,device="cpu")
+        model = PPO.load(past_weight_path,device="cpu",ent_coef=0.01)
         model.set_env(env)
         print("Loaded past weights")
 
     model.learn(total_timesteps=total_timesteps, callback=callbacks)
-
-    model.save(weight_file_name)
