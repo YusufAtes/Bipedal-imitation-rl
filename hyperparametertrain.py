@@ -1,15 +1,24 @@
 # from pybullet_bipedenv_torquecontrolled import BipedEnv
-from pybullet_bipedenv_poscontrolled import POS_Biped
+# from pybullet_bipedenv_poscontrolled import POS_Biped
+# from pybullett_bipedenv_trcontrol_ankle import BipedEnv
+
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.callbacks import (
+    CheckpointCallback,
+    EvalCallback,
+    StopTrainingOnNoModelImprovement,
+    BaseCallback,
+)
 from pybullett_bipedenv_trcontrol_ankle import BipedEnv
 import os
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
-from stable_baselines3 import PPO, SAC
+from stable_baselines3 import PPO
 import time
 from typing import Callable
-from stable_baselines3.common.env_util import make_vec_env
-import pandas as pd
-import matplotlib.pyplot as plt
+import re
+
+
 t0 = time.time()
 class RewardLoggerCallback(BaseCallback):
     def __init__(self, log_file: str, verbose: int = 0):
@@ -45,10 +54,9 @@ class RewardLoggerCallback(BaseCallback):
 
         return True
     def _on_training_end(self) -> None:
-        pass
         # Optionally summarize results at the end of training
-        # print("Training finished. Total episodes:", len(self.episode_rewards))
-        # print("Episode rewards:", self.episode_rewards)
+        print("Training finished. Total episodes:", len(self.episode_rewards))
+        print("Episode rewards:", self.episode_rewards)
 
 class CustomCheckpointCallback(BaseCallback):
     def __init__(self, save_freq, save_path,init_no = 0, verbose=0):
@@ -62,7 +70,7 @@ class CustomCheckpointCallback(BaseCallback):
         # Save the model every `save_freq` steps
         if self.n_calls % self.save_freq == 0:
             self.init_no +=1
-            model_path = f"{self.save_path}/model_checkpoint_{self.init_no}.zip"
+            model_path = f"{self.save_path}/model_checkpoint_{self.init_no}"+checkpoint_name
             self.model.save(model_path)
             if self.verbose > 0:
                 print(f"Model saved at step {self.n_calls} to {model_path}")
@@ -70,71 +78,111 @@ class CustomCheckpointCallback(BaseCallback):
                 time.sleep(15)
 
         return True
+    
+def linear_schedule(initial_value: float) -> Callable[[float], float]:
+    """
+    Returns a function that computes
+    `progress_remaining * initial_value`.
+    """
+    def func(progress_remaining: float) -> float:
+        return progress_remaining * initial_value
+    return func
 
-# Usage
+namelist = []
 
-ent_coefs = [0.0005,0.001,0.01]
-n_steps = [1024, 2048, 4096]
-clip_ranges = [0.15,0.18,0.2]
-batch_sizes = [64,32,128]
-lrs = [3e-4,1e-4,3e-5]
-#make a dictionary that contains all combinations of the above
+target_kl_list = [0.1, 0.2,None]
+clip_range_list = [0.15, linear_schedule(0.2)]
+learning_rate_list = [3e-4, linear_schedule(3e-4),1e-4]
+batch_control_list = [[4096, 512, 6], [2048, 256, 8], [2048, 64, 10]]
+ent_coef_list = [1e-3, 5e-4]
+
 hyperparameters = {
-    "ent_coef": ent_coefs,
-    "n_steps": n_steps,
-    "clip_range": clip_ranges,
-    "batch_size": batch_sizes,
-    "learning_rate": lrs
+    "target_kl": target_kl_list,
+    "clip_range": clip_range_list,
+    "learning_rate": learning_rate_list,
+    "batch_control": batch_control_list,
+    "ent_coef": ent_coef_list,
 }
-#make a list of all combinations of the above
+
 from itertools import product
 combinations = list(product(*hyperparameters.values()))
 namelist = []
 for i in range(len(combinations)):
     namelist.append("hpt_trials/ppo_256_256" + "_".join([str(x) for x in combinations[i]]))
 
-total_timesteps = 5000000
 
+# ========== MAIN TRAINING LOOP ==========
 for k in range(len(namelist)):
-    ppo_folder = namelist[k].split("/")[1]
-    reward_Logger_name = namelist[k]+"/"+ppo_folder+".csv"
-    checkpoint_name = namelist[k]+".zip"
-    weight_file_name = "final_"+namelist[k]
-    use_past_weights = False
+    SAVE_DIR = namelist[k]
+    checkpoint_name = SAVE_DIR+".zip"
+    rewar_Logger_name = SAVE_DIR+".csv"
+    TOTAL_TIMESTEPS = 10_000
+    os.makedirs(SAVE_DIR, exist_ok=True)
 
-    if os.path.exists(namelist[k]):
-        pass
-    else:
-        os.makedirs(namelist[k])
+    # 1) ENVIRONMENT
+    train_env = BipedEnv(render_mode=None)
+
+    # 2) CALLBACKS
+    # a) checkpoint every 500k steps
+    checkpoint_cb = CustomCheckpointCallback(
+        save_freq=200_000,
+        save_path=SAVE_DIR,
+        verbose=1,
+    )
+    # b) logging raw episode rewards to CSV
+    reward_logger = RewardLoggerCallback(log_file=os.path.join(SAVE_DIR, "rewards.csv"))
 
 
-    checkpoint_callback = CustomCheckpointCallback(
-            save_freq =500000, save_path=namelist[k], verbose=1
-        )
-    reward_logger = RewardLoggerCallback(log_file=reward_Logger_name)
+    callback_list = [checkpoint_cb, reward_logger]
 
-    callbacks = CallbackList([checkpoint_callback, reward_logger])
-
-    env = BipedEnv(render_mode=None)
-    env.reset()
-
-    policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
-    print("Starting training")
+    # 3) MODEL CONFIGURATION
+    policy_kwargs = dict(
+        net_arch=dict(pi=[256, 256], vf=[256, 256]),
+        # orthogonal init & layer norm could go here if desired
+    )
 
     model = PPO(
-        "MlpPolicy",
-        policy_kwargs=policy_kwargs,
+        policy="MlpPolicy",
+        env=train_env,
         device="cpu",
-        env=env,
-        tensorboard_log="./"+namelist[k] +"/",
-        ent_coef= combinations[k][0],
-        n_steps = combinations[k][1],
-        batch_size=combinations[k][3],
-        learning_rate=combinations[k][4],
-        clip_range=combinations[k][2])
+        tensorboard_log=SAVE_DIR,
 
-    model.learn(total_timesteps=total_timesteps, callback=callbacks)
-    ppo_path = namelist[k]
+        # --- General HYPERPARAMS ---        
+        # --- KL & clipping ---
+
+        target_kl=combinations[k][0],                           # hard KL ceiling
+        clip_range=combinations[k][1],        # decay from 0.15 → 0
+        clip_range_vf=None,                      # keep value clipping default
+
+        # --- Learning rate schedule ---
+        learning_rate=combinations[k][2],
+
+        # --- Exploration & entropy ---
+        ent_coef=combinations[k][4],          # high early entropy → 0
+
+        # --- Batch / epoch control ---
+        n_steps=combinations[k][3][0],                             # longer rollout for smoother adv
+        batch_size=combinations[k][3][1],                           # big minibatches
+        n_epochs=combinations[k][3][2],                               # fewer passes per rollout
+
+        # # --- Gradient clipping ---
+        # max_grad_norm=0.3,
+
+        policy_kwargs=policy_kwargs
+    )
+
+    # 4) TRAIN
+    model.learn(
+        total_timesteps=TOTAL_TIMESTEPS,
+        callback=callback_list,
+    )
+
+    # 5) SAVE final model & stats
+    model.save(os.path.join(SAVE_DIR, "final_model"))
+    print("Training complete. Models and logs are in:", SAVE_DIR)
+
+    import pandas as pd
+    import matplotlib.pyplot as plt
     speeds = np.linspace(0.2, 3, 7)
     angles = np.linspace(-20, 20, 20)
 
@@ -156,7 +204,7 @@ for k in range(len(namelist)):
             total_rew = 0
             episode_len = 10
             max_steps = int(episode_len*(1/dt))
-            obs, info = env.reset(test_speed=test_speed, test_angle= test_angle,demo_max_steps = max_steps)
+            obs, info = train_env.reset(test_speed=test_speed, test_angle= test_angle,demo_max_steps = max_steps)
                                     #,ground_noise=ground_noise,ground_resolution=0.1)  # Gym API
             t0 = time.time()
             start_pos = 0
@@ -169,10 +217,10 @@ for k in range(len(namelist)):
             for i in range(0, int(max_steps/10)):
                 action, _states = model.predict(obs)
 
-                obs, rewards, dones, truncated, info = env.step(action)
+                obs, rewards, dones, truncated, info = train_env.step(action)
 
                 total_rew += rewards            
-                ext_state = env.return_external_state()
+                ext_state = train_env.return_external_state()
                 if dones:
                     succes = False
                     mean_speed = 0
@@ -183,34 +231,23 @@ for k in range(len(namelist)):
             #print('total reward: ', total_rew)
             total_travel_dist = ext_state[1]
             mean_speed = total_travel_dist / episode_len
-            #find me the sign change in the past_rhip and past_lhip
-            # print('rhip sign changes: ', rhip_sign_changes)
-            # print('lhip sign changes: ', lhip_sign_changes)
 
             if terminated == False:
                 if mean_speed < 0.1:
                     mean_speed = 0
-                    succes = False
-                    failed_attempts += 1
                 elif (mean_speed > 3):
                     mean_speed = 0
                     failed_attempts += 1
                     succes = False
-                if mean_speed > max_speed:
-                    max_speed = mean_speed
-                    print(f'New max speed: {max_speed} Speed Value: {test_speed} Angle: {test_angle*180/3.14159}')
 
             test_angle_deg = 180*test_angle/3.14159
-            #print the results only two decimal points
-            
-            # print(f"Speed: {test_speed:.2f}, Angle: {test_angle_deg:.2f}, Distance: {distance:.2f}, Success: {succes}, Reward: {total_rew}")
             
             #add to the dataframe
             demo_cases = pd.concat([demo_cases, pd.DataFrame([[test_speed, test_angle_deg, mean_speed, 
                                                             succes, total_rew]], columns=['Speed', 'Angle', 'Distance', 
                                                                                             'Success','Reward'])], ignore_index=True)
             
-    demo_cases.to_csv(os.path.join(ppo_path, "demo_results.csv"), index=False)
+    demo_cases.to_csv(os.path.join(SAVE_DIR, "demo_results.csv"), index=False)
 
     # plot the results of the demo make the x axis the speed and the y axis the angle and the color the distance and make the failures red
     plt.figure()
@@ -228,16 +265,16 @@ for k in range(len(namelist)):
     plt.xlabel('Speed Value')
     plt.ylabel('Ramp Angle')
     plt.title('Demo results')
-    plt.savefig(os.path.join(ppo_path, "demo_results.png"))
+    plt.savefig(os.path.join(SAVE_DIR, "demo_results.png"))
     plt.close()
     print("Done Combination: ", namelist[k])
-    with open(os.path.join(ppo_path, "success_rate.txt"), 'w') as f:
+    with open(os.path.join(SAVE_DIR, "success_rate.txt"), 'w') as f:
         f.write(f"Failed attempts: {failed_attempts}\n")
         f.write(f"Total attempts: {total_attempts}\n")
         f.write(f"Success rate: {(total_attempts - failed_attempts)/total_attempts}\n")
         f.write(f"Max speed: {max_speed}\n")
         f.write(f"Demo cases: \n")
         f.write(demo_cases.to_string())
-    env.close()
+    train_env.close()
     del model
-    time.sleep(1)
+    time.sleep(10)

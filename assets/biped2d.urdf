@@ -229,7 +229,7 @@
         <box size="0.06 0.185 .04"/>
       </geometry>
       <origin rpy="0 0 0" xyz="0.0 0.09 -0.03"/>
-      <contact_coefficients mu="1.9" />
+      <contact_coefficients mu="0.65" />
     </collision>
     <inertial>
       <mass value="1"/>
@@ -242,7 +242,7 @@
     <parent link="l_lowerleg"/>
     <child link="l_foot"/>
     <axis xyz="1 0 0"/>
-    <limit effort="100.0" lower="-1." upper="0.5" velocity="10.0"/>
+    <limit effort="100.0" lower="-1.57" upper="0.5" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="-0.0 -0.035 -.45"/>
   </joint>
 
@@ -260,7 +260,7 @@
         <box size="0.06 0.185 .04"/>
       </geometry>
       <origin rpy="0 0 0" xyz="-0.0 0.09 -0.03"/>
-      <contact_coefficients mu="1.9" />
+      <contact_coefficients mu="0.65" />
     </collision>
     <inertial>
       <mass value="1"/>
@@ -273,7 +273,7 @@
     <parent link="r_lowerleg"/>
     <child link="r_foot"/>
     <axis xyz="1 0 0"/>
-    <limit effort="100.0" lower="-1." upper="0.5" velocity="10.0"/>
+    <limit effort="100.0" lower="-1.57" upper="0.5" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="0.0 -0.035 -.45"/>
   </joint>
 

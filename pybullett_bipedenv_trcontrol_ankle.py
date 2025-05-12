@@ -1,16 +1,13 @@
-import os
 import numpy as np
 from scipy.signal import resample
 import torch
 from gait_generator_net import SimpleFCNN
 import gymnasium as gym
 from gymnasium import spaces
-from gymnasium.utils import seeding
 import pybullet as p
 import pybullet_data
 import time
-from animatebiped import animate_biped
-from scipy.interpolate import interp1d
+from PIL import Image
 
 class BipedEnv(gym.Env):
     def __init__(self,render=False, render_mode= None, demo_mode=False):
@@ -37,22 +34,18 @@ class BipedEnv(gym.Env):
 
         self.t = 0
         self.gaitgen_net = SimpleFCNN()
-        self.gaitgen_net.load_state_dict(torch.load('newnorm_final_hs512_lr0.0001_bs32_epochs10000.pth',weights_only=True))
+        self.gaitgen_net.load_state_dict(torch.load('newnorm_final_hs512_lr0.0003_bs32_epochs10000.pth',weights_only=True))
         
-        self.normalizationconst = np.load(rf"gait reference fft5.00/newnormalization_constants.npy")
+        self.normalizationconst = np.load(rf"newnormalization_constants.npy")
         self.joint_no = self.p.getNumJoints(self.robot)
-        self.max_torque = np.array([1000,1000,500,250,1000,500,250])
-        # self.max_torque = 500
-        self.kp = np.array([ 0.1 ,  0.3,  0.2,  0.1,  0.3,  0.2,  0.1])
-        self.kd = 0.1*self.kp
+        self.max_torque = np.array([1000,1000,700,350,1000,700,350])
         self.state = np.zeros(58)
         self.update_const = 0.75
         self.velocity_norrmcoeff = 10.0
         self.pos_normcoeff = np.pi
         self.torque_normcoeff = 1000
 
-
-    def reset(self,seed=None,test_speed = None, test_angle = None,demo_max_steps = None):
+    def reset(self,seed=None,test_speed = None, test_angle = None,demo_max_steps = None, ground_noise = None, ground_resolution = None):
         
         self.test_speed = test_speed
         self.test_angle = test_angle
@@ -60,17 +53,17 @@ class BipedEnv(gym.Env):
         self.t = 0
         self.init_no += 1
         self.p.resetSimulation(physicsClientId=self.physics_client)
-        
         self.reference_speed = 0.3 + np.random.rand()*2.7
         self.ramp_angle = np.random.uniform(-6,6) *np.pi / 180
 
-        if demo_max_steps:
-            self.max_steps = demo_max_steps
-        if self.test_speed is not None:
-            self.reference_speed = self.test_speed
+        if self.demo_mode == True:
+            if demo_max_steps:
+                self.max_steps = demo_max_steps
+            if self.test_speed is not None:
+                self.reference_speed = self.test_speed
 
-        if self.test_angle is not None:
-            self.ramp_angle = self.test_angle
+            if self.test_angle is not None:
+                self.ramp_angle = self.test_angle *np.pi / 180
 
         encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
         encoder_vec[0] = self.reference_speed/3
@@ -81,7 +74,14 @@ class BipedEnv(gym.Env):
         self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)     #Clip the gait
 
         plane_orientation = self.p.getQuaternionFromEuler([self.ramp_angle, 0 , 0])
-        self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
+
+        if self.demo_mode == False:
+            self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
+        else:
+            if (ground_noise != None) and (ground_resolution != None):
+                self.init_noisy_plane(ground_resolution=ground_resolution, noise_level=ground_noise,baseOrientation=plane_orientation)
+            else:
+                self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
 
         self.reset_info = {'current state':self.state}
         self.past_action_error = np.zeros(7)
@@ -94,6 +94,9 @@ class BipedEnv(gym.Env):
         self.external_states = np.zeros(3)
         self.init_state()
         self.return_state()
+        if self.demo_mode == True:
+            img = self.get_image()
+            return self.state, img, self.reset_info
 
         return self.state, self.reset_info
 
@@ -102,7 +105,7 @@ class BipedEnv(gym.Env):
         self.target_action = torques * self.max_torque
         for i in range(10):
             self.current_action = self.update_const*self.target_action + (1-self.update_const)*self.current_action 
-            self.t+=1
+            self.t +=1
             self.p.setJointMotorControlArray(
                 bodyIndex=self.robot,
                 jointIndices=self.joint_idx,
@@ -113,9 +116,6 @@ class BipedEnv(gym.Env):
             # Step simulation
             self.p.stepSimulation()
             
-            # if self.render_mode == 'human':
-            #     time.sleep(self.dt)
-
         self.past_target_action = self.target_action
         self.past2_target_action = self.past_target_action
         self.return_state()
@@ -123,6 +123,7 @@ class BipedEnv(gym.Env):
             time.sleep(self.dt)
             reward = 0
             done = False
+            reward, done = self.biped_reward(self.state,torques=self.current_action)
         else:
             reward, done = self.biped_reward(self.state,torques=self.current_action)
         truncated = False
@@ -134,77 +135,71 @@ class BipedEnv(gym.Env):
 
     def biped_reward(self,x,torques):
 
+        self.imitation_weight = 1 #/ (1 + np.exp(-10 + 5*self.init_no/15000)) #sigmoid function to scale the imitation weight
+        #imitiation_compromise = 1 - self.imitation_weight
         self.alive_weight = 0.2
-        self.forward_weight = 0.2
-        self.contact_weight = 0.1
+        self.contact_weight = 0.2
         done = False
         reward = 0
+
         contact_points = self.p.getContactPoints(self.robot, self.planeId)
-        # Conditions for early termination regarding stability
+        left_contact = len([i for i in contact_points if i[3] == 8])
+        right_contact = len([i for i in contact_points if i[3] == 5])
 
-        if not contact_points:
-            reward -=1  * self.contact_weight
-        if x[9] < -1:
-            reward -=1  * self.contact_weight
-        if x[12] < -1:
-            reward -=1  * self.contact_weight
-        else:
-            reward +=len(contact_points)  * self.contact_weight
-        
-        # if x[3] < 0:
-        #     reward -= 1 * self.forward_weight
+        if left_contact > 2 and right_contact == 0 :
+            reward += self.contact_weight
+        elif right_contact > 2 and left_contact == 0:
+            reward += self.contact_weight
+        elif left_contact > 2 and right_contact > 2:
+            reward += self.contact_weight
+        # elif left_contact < 1 and right_contact < 1:
+        #     reward -= self.contact_weight
+    
 
-        # if (x[7] > 0.15) and (x[10] > 0.15):
-        #     reward -=1  * self.alive_weight
-        # elif (x[7] < -0.15) and (x[10] < -0.15):
-        #     reward -=1  * self.alive_weight
-        # else:
-        #     reward += 1 * self.alive_weight
-
-        if self.external_states[2] > 1.4 + np.tan(self.ramp_angle) * self.external_states[1]:
-            reward -= 30
+        if self.external_states[2] > 1.45 + np.tan(self.ramp_angle) * self.external_states[1]:
+            reward -= 20
             done = True
-        elif self.external_states[2] > 1.2+ np.tan(self.ramp_angle) * self.external_states[1]:
+        elif self.external_states[2] > 1.25+ np.tan(self.ramp_angle) * self.external_states[1]:
             reward -= self.alive_weight
-        elif self.external_states[2] < 0.8+ np.tan(self.ramp_angle) * self.external_states[1]:
-            reward -= 30
+        elif self.external_states[2] < 0.75+ np.tan(self.ramp_angle) * self.external_states[1]:
+            reward -= 20
             done = True
-        elif self.external_states[2] < 1.0+ np.tan(self.ramp_angle) * self.external_states[1]:
+        elif self.external_states[2] < 0.95+ np.tan(self.ramp_angle) * self.external_states[1]:
             reward -= 1 * self.alive_weight
         else:
             reward += 1 * self.alive_weight
 
         hip_joint_pos = x[[7,10]] *self.pos_normcoeff
         hip_ref_pos = x[[34,37]] *self.pos_normcoeff
-        reward += np.exp(-6*np.linalg.norm(hip_joint_pos - hip_ref_pos))
+        reward += self.imitation_weight * np.exp(-5*np.linalg.norm(hip_joint_pos - hip_ref_pos))
 
         knee_joint_pos = x[[8,11]] *self.pos_normcoeff
         knee_ref_pos = x[[35,38]] *self.pos_normcoeff
-        reward += np.exp(-6*np.linalg.norm(knee_joint_pos - knee_ref_pos))
+        reward += self.imitation_weight *np.exp(-5*np.linalg.norm(knee_joint_pos - knee_ref_pos))
 
         ankle_joint_pos = x[[9,12]] *self.pos_normcoeff
         ankle_ref_pos = x[[36,39]] *self.pos_normcoeff
-        reward += np.exp(-6*np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
+        reward += self.imitation_weight *np.exp(-5*np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
 
         hip_joint_vel = x[[28,31]] * self.velocity_norrmcoeff
         hip_ref_vel = x[[52,55]] * self.velocity_norrmcoeff
-        reward += 0.35*np.exp(-0.1*np.linalg.norm(hip_joint_vel - hip_ref_vel))
+        reward += self.imitation_weight * 0.2 * np.exp(-0.1*np.linalg.norm(hip_joint_vel - hip_ref_vel))
 
         knee_joint_vel = x[[29,32]] * self.velocity_norrmcoeff
         knee_ref_vel = x[[53,56]] * self.velocity_norrmcoeff
-        reward += 0.35*np.exp(-0.1*np.linalg.norm(knee_joint_vel - knee_ref_vel))
+        reward += self.imitation_weight * 0.2 * np.exp(-0.1*np.linalg.norm(knee_joint_vel - knee_ref_vel))
 
         ankle_joint_vel = x[[30,33]] * self.velocity_norrmcoeff
         ankle_ref_vel = x[[54,57]] * self.velocity_norrmcoeff
-        reward += 0.35 * np.exp(-0.1*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
+        reward += self.imitation_weight * 0.2 * np.exp(-0.1*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
 
         reward -= 3e-3 * np.mean(np.abs(torques))
-        # reward += self.external_states[1]* 1e-1
-        reward += 0.25 * (self.external_states[1] - self.past_forward_place)/ (self.dt * 10) #currently not active in ppo256_256 34
+        reward += (0.2) * (self.external_states[1] - self.past_forward_place)/ (self.dt * 10) 
+
         return reward, done
     
     def close(self):
-        self.p.disconnect()
+        p.disconnect()
         print("Environment closed")
 
 
@@ -244,19 +239,6 @@ class BipedEnv(gym.Env):
             pred_time = np.tile(pred_time, (5,1))    # Create loop for reference movement
         return pred_time
 
-    # def starting_height(self,rhip_pos,rknee_pos,lhip_pos,lknee_pos,r_flat):
-    #     upper_len = 0.45
-    #     lower_len = 0.45
-    #     foot_len = 0.185
-    #     if r_flat:
-    #         hip_short = upper_len - (upper_len * np.cos(rhip_pos))
-    #         knee_short = lower_len - (lower_len * np.cos(rhip_pos + rknee_pos))
-    #         init_pos = 1.185 - hip_short - knee_short 
-    #     else:
-    #         hip_short = upper_len - (upper_len * np.cos(lhip_pos))
-    #         knee_short = lower_len - (lower_len * np.cos(lhip_pos + lknee_pos))
-    #         init_pos = 1.185 - hip_short - knee_short  
-    #     return init_pos
 
     def starting_height(self,hip_init,knee_init,ankle_init):
 
@@ -268,7 +250,7 @@ class BipedEnv(gym.Env):
         hip_short = upper_len - (upper_len * np.cos(hip_init) )
         knee_short = lower_len - (lower_len * np.cos(knee_init))
         foot_exten = foot_len * np.sin(np.abs(ankle_init))
-        init_pos = 1.190 - hip_short - knee_short 
+        init_pos = 1.195 - hip_short - knee_short 
 
         return init_pos
     
@@ -318,12 +300,12 @@ class BipedEnv(gym.Env):
             start_idx = 0
             self.reference_idx = start_idx
 
-            rhip_pos = 0.1571
+            rhip_pos = 0.0
             rknee_pos = 0.0
-            rankle_pos = -0.1571
-            lhip_pos = -0.1571
+            rankle_pos = 0.0
+            lhip_pos = 0.0
             lknee_pos = 0.0
-            lankle_pos = 0.1571
+            lankle_pos = 0.0
             
 
             init_z = self.starting_height(rhip_pos,lhip_pos,rankle_pos)
@@ -458,3 +440,63 @@ class BipedEnv(gym.Env):
 
     def return_external_state(self):
         return self.external_states
+    
+    def init_noisy_plane(self, noise_level=0.1,ground_resolution= 0.1 ,num_rows=128, num_columns=1024,
+                        baseOrientation=None):
+
+        # Use identity quaternion if none provided.
+        mesh_scale=[ground_resolution, ground_resolution, 1]
+        if baseOrientation is None:
+            baseOrientation = p.getQuaternionFromEuler([0, 0, 0])
+        
+        # Generate heightfield data with noise in the range [-noise_level, noise_level]
+        heightfield_data = np.random.uniform(low=-noise_level, high=noise_level, size=num_rows * num_columns).tolist()
+
+        # Create a collision shape for the heightfield
+        terrain_shape = p.createCollisionShape(
+            shapeType=p.GEOM_HEIGHTFIELD,
+            meshScale=mesh_scale,
+            heightfieldData=heightfield_data,
+            numHeightfieldRows=num_rows,
+            numHeightfieldColumns=num_columns,
+            physicsClientId=self.physics_client
+        )
+
+        # Create a static (mass=0) multi-body using the heightfield shape
+        self.planeId = p.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=terrain_shape,
+            basePosition=[0, 0, 0],
+            baseOrientation=baseOrientation,
+            physicsClientId=self.physics_client
+        )
+        p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+
+    def get_image(self):
+        view_matrix = p.computeViewMatrix(
+            cameraEyePosition=[3, 0, 1.5],  # farther and higher
+            cameraTargetPosition=[0, 0, 1.0],
+            cameraUpVector=[0, 0, 1]
+        )
+
+        # Use square aspect and wide FOV
+        projection_matrix = p.computeProjectionMatrixFOV(
+            fov=75,               # wider field of view
+            aspect=1.0,           # square image
+            nearVal=0.1,
+            farVal=100.0
+        )
+
+        # Capture square image
+        res = 640
+        _, _, rgbImg, _, _ = p.getCameraImage(
+            width=res,
+            height=res,
+            viewMatrix=view_matrix,
+            projectionMatrix=projection_matrix
+        )
+
+        # Convert and save image
+        rgb_array = np.reshape(rgbImg, (res, res, 4))
+        image = Image.fromarray(rgb_array[:, :, :3], 'RGB')
+        return image
