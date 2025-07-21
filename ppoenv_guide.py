@@ -61,7 +61,8 @@ class BipedEnv(gym.Env):
         self.init_no += 1
         p.resetSimulation(physicsClientId=self.physics_client)
         self.reference_speed = 0.1 + np.random.rand()*2.8
-        self.ramp_angle = np.random.uniform(-5,5) *np.pi / 180
+        ramp_Limit = 6 * (1 / (1+ np.exp(-self.init_no / 10000))) # sigmoid function to scale the ramp angle
+        self.ramp_angle = np.random.uniform(-ramp_Limit,ramp_Limit) *np.pi / 180
 
         if self.demo_mode == True:
             if demo_max_steps:
