@@ -150,7 +150,7 @@
     <parent link="torso"/>
     <child link="l_upperleg"/>
     <axis xyz="1 0 0"/>
-    <limit effort="500.0" lower="-1.57." upper="1.57" velocity="10.0"/>
+    <limit effort="500.0" lower="-1.57" upper="1.57" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="-0.1 0 -0.24"/>
   </joint>
 
@@ -181,7 +181,7 @@
     <parent link="r_upperleg"/>
     <child link="r_lowerleg"/>
     <axis xyz="1 0 0"/>
-    <limit effort="300.0" lower="-1.57." upper="0.1" velocity="10.0"/>
+    <limit effort="300.0" lower="-1.57" upper="0.1" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="0.015 0 -.45"/>
   </joint>
 
@@ -212,7 +212,7 @@
     <parent link="l_upperleg"/>
     <child link="l_lowerleg"/>
     <axis xyz="1 0 0"/>
-    <limit effort="300.0" lower="-1.57." upper="0.1" velocity="10.0"/>
+    <limit effort="300.0" lower="-1.57" upper="0.1" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="-0.015 0 -.45"/>
   </joint>
 
@@ -242,7 +242,7 @@
     <parent link="l_lowerleg"/>
     <child link="l_foot"/>
     <axis xyz="1 0 0"/>
-    <limit effort="100.0" lower="-1.57" upper="0.5" velocity="10.0"/>
+    <limit effort="150.0" lower="-1.57" upper="0.5" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="-0.0 -0.035 -.45"/>
   </joint>
 
@@ -273,7 +273,7 @@
     <parent link="r_lowerleg"/>
     <child link="r_foot"/>
     <axis xyz="1 0 0"/>
-    <limit effort="100.0" lower="-1.57" upper="0.5" velocity="10.0"/>
+    <limit effort="150.0" lower="-1.57" upper="0.5" velocity="10.0"/>
     <origin rpy="0 0 0" xyz="0.0 -0.035 -.45"/>
   </joint>
 

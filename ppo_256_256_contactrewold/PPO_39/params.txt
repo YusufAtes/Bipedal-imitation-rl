@@ -1,0 +1,3 @@
+foot placemenet reward is useless needs to be removed or placed correctly.
+i will train one algorithm for 2m without imitation decay and with imitation decay i think the algorithm doesnot work properly or it is not beneficial
+FOOT placement reward will be absent and if the works still result funny better placement reward will be made.

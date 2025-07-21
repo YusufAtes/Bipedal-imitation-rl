@@ -1,6 +1,8 @@
 # from pybullett_bipedenv_trcontrol_ankle import BipedEnv
 # from pybullet_bipedenv_poscontrolled import POS_Biped
-from pybullet_biped_7d_ppo13 import BipedEnv
+# from pybullet_biped_7d_ppo13 import BipedEnv
+from ppoenv_guide import BipedEnv
+# from ppoenv_imitationscaled import BipedEnv
 import os
 import numpy as np
 from stable_baselines3 import PPO, SAC
@@ -10,9 +12,9 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # Needed for 3D plotting
 
 
-ppo_path = "ppo_256_256/PPO_36"
-env = BipedEnv(demo_mode=True,render_mode='human')
-ppo_file = "model_checkpoint_2ppo_256_256.zip"
+ppo_path = "ppo_256_256/PPO_27"
+env = BipedEnv(demo_mode=True, render_mode='human')
+ppo_file = "final_model.zip"
 
 def count_sign_changes(values):
     if not values or len(values) < 2:
@@ -43,22 +45,24 @@ failed_attempts = 0
 start_pos = 0
 max_speed = 0
 episode_len = 5
-past_rhip = []
-past_lhip = []
+
 
 for current_no in range(case_no):
+    past_rhip = []
+    past_lhip = []
     total_rew = 0
     total_attempts += 1
     succes = True
-    test_speed = np.random.uniform(0.2, 3)
-    test_angle = np.random.uniform(-15,15)*3.14159/180
+    test_speed = 1.3
+    test_angle = -5
 
     dt = 1e-3 #default of pybullet
     total_rew = 0
-    episode_len = 10
+    episode_len = 4
     max_steps = int(episode_len*(1/dt))
-    obs, info = env.reset(test_speed=test_speed, test_angle= test_angle,demo_max_steps = max_steps)
+    obs, img, info = env.reset(test_speed=test_speed, test_angle= test_angle,demo_max_steps = max_steps)
                             #,ground_noise=ground_noise,ground_resolution=0.1)  # Gym API
+    
     t0 = time.time()
     start_pos = 0
     ending_pos = 0
@@ -67,16 +71,24 @@ for current_no in range(case_no):
     first_init = True
     required_fall_time = 10
     j = 0
-    print(f'Current case: {current_no} Speed: {test_speed} Angle: {test_angle*180/3.14159}')
+    contact_list = []
+    print(f'Current case: {current_no} Speed: {test_speed} Angle: {test_angle}')
     for i in range(0, int(max_steps/10)):
         action, _states = model.predict(obs)
 
         obs, rewards, dones, truncated, info = env.step(action)
         time.sleep(0.01)
-        past_rhip.append(obs[6])
-        past_lhip.append(obs[9])
+        past_rhip.append(obs[7])
+        past_lhip.append(obs[10])
         total_rew += rewards            
         ext_state = env.return_external_state()
+        # contact_list.append(len(contact_points))
+        if len(contact_list) == 50:
+            #remove the first element
+            if np.mean(contact_list) == 0:
+                print("Contact points: ",np.mean(contact_list))
+            contact_list.pop(0)
+            
         if dones:
             succes = False
             mean_speed = 0
@@ -89,6 +101,7 @@ for current_no in range(case_no):
     #find me the sign change in the past_rhip and past_lhip
     rhip_sign_changes = count_sign_changes(past_rhip)
     lhip_sign_changes = count_sign_changes(past_lhip)
+    print(f"Rhip sign changes: {rhip_sign_changes} Lhip sign changes: {lhip_sign_changes}")
     print("Episode was successful: ", succes)
     if terminated == False:
         if mean_speed < 0.1:

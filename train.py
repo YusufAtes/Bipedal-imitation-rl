@@ -1,20 +1,24 @@
 # from pybullet_bipedenv_torquecontrolled import BipedEnv
 # from pybullet_bipedenv_poscontrolled import POS_Biped
 # from pybullett_bipedenv_trcontrol_ankle import BipedEnv
-from pybullet_biped_7d_ppo13 import BipedEnv
+
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.callbacks import (
+    CheckpointCallback,
+    EvalCallback,
+    StopTrainingOnNoModelImprovement,
+    BaseCallback,
+)
+import torch
+from ppoenv_guide import BipedEnv
 import os
-import numpy as np
+import datetime
+from math import cos, pi
 from stable_baselines3.common.callbacks import BaseCallback, CallbackList
-from stable_baselines3 import PPO, SAC
+from stable_baselines3 import PPO
 import time
 from typing import Callable
-from stable_baselines3.common.env_util import make_vec_env
 
-from typing import Callable
-def linear_schedule(initial_value: float) -> Callable[[float], float]:
-    def func(progress_remaining: float) -> float:
-        return progress_remaining * initial_value
-    return func
 
 t0 = time.time()
 class RewardLoggerCallback(BaseCallback):
@@ -75,73 +79,175 @@ class CustomCheckpointCallback(BaseCallback):
                 time.sleep(15)
 
         return True
-
-# Usage
-
-# Define a function to create the environment
-def make_env():
-    def _init():
-        env = BipedEnv(render_mode=None)
-        # Optional: Add wrappers here if needed (e.g., Monitor)
-        # from stable_baselines3.common.monitor import Monitor
-        # env = Monitor(env)
-        return env
-    return _init
-
-# Number of parallel environments
-num_cpu = 4 # Adjust based on your CPU cores
-
-# Create the vectorized environment
-
-
-total_timesteps = 6000000
-namelist = ["ppo_256_256"]
-
-for i in range(len(namelist)):
-    rewar_Logger_name = namelist[i]+".csv"
-    checkpoint_name = namelist[i]+".zip"
-    weight_file_name = "final_"+namelist[i]
-    use_past_weights = False
-
-    if os.path.exists(namelist[i]):
-        pass
-    else:
-        os.makedirs(namelist[i])
     
-    past_weight_path = "weights_upt/model_checkpoint_2ppo_upt_128_64_softupdate_ramp.zip"
-    init_no = 3
+def linear_schedule(initial_value: float) -> Callable[[float], float]:
+    """
+    Returns a function that computes
+    `progress_remaining * initial_value`.
+    """
+    def func(progress_remaining: float) -> float:
+        return progress_remaining * initial_value 
+    return func
 
-    if use_past_weights:
-        checkpoint_callback = CustomCheckpointCallback(
-            save_freq=500000, save_path=namelist[i],init_no=init_no, verbose=1
+namelist = ["ppo_256_256"]
+checkpoint_name = namelist[0]+".zip"
+rewar_Logger_name = namelist[0]+".csv"
+
+def cosine_schedule(initial_value: float, final_value: float):
+    """Cosine decay from *initial_value* → *final_value*.
+    SB3 passes *progress_remaining* in [1, 0]."""
+    def _fn(progress_remaining: float) -> float:
+        return final_value + (initial_value - final_value) * 0.5 * (
+            1 + cos(pi * progress_remaining)
         )
-    else:
-        checkpoint_callback = CustomCheckpointCallback(
-            save_freq=500000, save_path=namelist[i], verbose=1
+    return _fn
+
+# ---------- Entropy‑decay callback ---------------------------------------------
+
+class EntropyDecayCallback(BaseCallback):
+    """Linearly decays `model.ent_coef` from *start* → *end*.
+    SB3 (≤2.0) stores `ent_coef` as a plain float, so scheduling must be manual.
+    """
+    def __init__(self, start: float, end: float, total_timesteps: int, verbose: int = 0):
+        super().__init__(verbose)
+        self.start = start
+        self.end = end
+        self.total = float(total_timesteps)
+
+    def _on_step(self) -> bool:
+        # progress_remaining: 1 → 0 over training
+        progress_remaining = 1.0 - self.model.num_timesteps / self.total
+        new_coef = self.end + (self.start - self.end) * progress_remaining
+        self.model.ent_coef = new_coef
+        return True
+
+# ---------- MAIN TRAINING LOOP -------------------------------------------------
+
+if __name__ == "__main__":
+    # 0) RUN IDENTIFIER ---------------------------------------------------------
+    TOTAL_TIMESTEPS = 20_000_000  # ≈200 M env steps → ~48 h at 1 kHz sim rate
+    SAVE_DIR = "ppo_256_256"
+    os.makedirs(SAVE_DIR, exist_ok=True)
+
+    # 1) ENVIRONMENT ------------------------------------------------------------
+    train_env = BipedEnv(render_mode=None)
+    # If you have a CurriculumWrapper defined, enable it like this:
+    # train_env = CurriculumWrapper(train_env)
+
+    # 2) CALLBACKS --------------------------------------------------------------
+    checkpoint_cb = CustomCheckpointCallback(
+        save_freq=500_000,
+        save_path=SAVE_DIR,
+        verbose=1,
+    )
+    reward_logger = RewardLoggerCallback(
+        log_file=os.path.join(SAVE_DIR, "rewards.csv")
+    )
+
+    # Entropy decays linearly 1e‑3 → 0 across training
+    ENT_START = 1e-3  # initial entropy coefficient
+    ENT_END   = 1e-4  # final entropy coefficient
+    entropy_decay_cb = EntropyDecayCallback(ENT_START, ENT_END, TOTAL_TIMESTEPS)
+
+    callback_list = CallbackList([checkpoint_cb, reward_logger, entropy_decay_cb])
+
+    # 3) MODEL CONFIGURATION ----------------------------------------------------
+    policy_kwargs = dict(
+        activation_fn=torch.nn.ReLU,
+        net_arch=dict(pi=[256, 256], vf=[256, 256])    
         )
-    reward_logger = RewardLoggerCallback(log_file=rewar_Logger_name)
-
-    callbacks = CallbackList([checkpoint_callback, reward_logger])
-
-    env = BipedEnv(render_mode=None)
-    env.reset()
-
-    policy_kwargs = dict(net_arch=dict(pi=[256, 256], vf=[256, 256]))
-    print("Starting training")
 
     model = PPO(
-        "MlpPolicy",
-        policy_kwargs=policy_kwargs,
-        device="cpu",
-        env=env,
-        tensorboard_log="./"+namelist[i] +"/",
-        ent_coef=1e-3,
-        learning_rate=1e-4,
-        clip_range=0.15)
+        policy="MlpPolicy",
+        env=train_env,
+        device="cpu",  # if you dont use cnn use cpu, if you use cnn use cuda
+        tensorboard_log=SAVE_DIR,
 
-    if use_past_weights:
-        # model = PPO.load(past_weight_path,device="cpu",ent_coef=0.01)
-        # model.set_env(env)
-        print("Loaded past weights")
+        # --- Core PPO hyper‑parameters ---------------------------------------
+        n_steps=8192,
+        batch_size=128,  # big minibatches for smoother advantages
+        n_epochs=10,
 
-    model.learn(total_timesteps=total_timesteps, callback=callbacks)
+        clip_range=0.18,  # 0.2
+        # clip_range_vf=None,
+        target_kl=0.2,  # hard KL ceiling
+
+        learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 0
+        ent_coef= 1e-3,          # no deduction constant scalar
+        policy_kwargs=policy_kwargs
+    )
+
+    # 4) TRAIN -----------------------------------------------------------------
+    model.learn(
+        total_timesteps=TOTAL_TIMESTEPS,
+        callback=callback_list,
+    )
+
+    # 5) SAVE FINAL ARTIFACTS --------------------------------------------------
+    model.save(os.path.join(SAVE_DIR, "final_model"))
+    print(f"Training complete. Models and logs are in: {SAVE_DIR}")
+
+# # ========== MAIN TRAINING LOOP ==========
+# if __name__ == "__main__":
+#     TOTAL_TIMESTEPS = 5_000_000
+#     SAVE_DIR      = namelist[0]
+#     os.makedirs(SAVE_DIR, exist_ok=True)
+
+#     # 1) ENVIRONMENT
+#     train_env = BipedEnv(render_mode=None)
+
+#     # 2) CALLBACKS
+#     # a) checkpoint every 500k steps
+#     checkpoint_cb = CustomCheckpointCallback(
+#         save_freq=500_000,
+#         save_path=SAVE_DIR,
+#         verbose=1,
+#     )
+#     # b) logging raw episode rewards to CSV
+#     reward_logger = RewardLoggerCallback(log_file=os.path.join(SAVE_DIR, "rewards.csv"))
+
+
+#     callback_list = [checkpoint_cb, reward_logger]
+
+#     # 3) MODEL CONFIGURATION
+#     policy_kwargs = dict(
+#         net_arch=dict(pi=[256, 256], vf=[256, 256]),
+#         # orthogonal init & layer norm could go here if desired
+#     )
+
+#     model = PPO(
+#         policy="MlpPolicy",
+#         env=train_env,
+#         device="cpu",
+#         tensorboard_log=SAVE_DIR,
+
+#         # --- General HYPERPARAMS ---        
+#         # --- KL & clipping ---
+
+#         target_kl=0.2,                           # hard KL ceiling
+#         clip_range=linear_schedule(0.3),        # decay from 0.15 → 0
+#         clip_range_vf=None,                      # keep value clipping default
+
+#         # --- Learning rate schedule ---
+#         learning_rate=linear_schedule(3e-4),
+
+#         # --- Exploration & entropy ---
+#         ent_coef=1e-3,          # high early entropy → 0
+
+#         # --- Batch / epoch control ---
+#         n_steps=4096,                             # longer rollout for smoother adv
+#         batch_size=128,                           # big minibatches
+#         n_epochs=6,                               # fewer passes per rollout
+
+#         policy_kwargs=policy_kwargs,
+#     )
+
+#     # 4) TRAIN
+#     model.learn(
+#         total_timesteps=TOTAL_TIMESTEPS,
+#         callback=callback_list,
+#     )
+
+#     # 5) SAVE final model & stats
+#     model.save(os.path.join(SAVE_DIR, "final_model"))
+#     print("Training complete. Models and logs are in:", SAVE_DIR)
