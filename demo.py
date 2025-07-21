@@ -11,25 +11,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # Needed for 3D plotting
 ppo_path = "ppo_256_256/PPO_27"
-env = BipedEnv(demo_mode=True)
+env = BipedEnv(demo_mode=True,render_mode=None)
 ppo_file = "final_model.zip"
-
-def count_sign_changes(values):
-    if not values or len(values) < 2:
-        return 0
-
-    sign_changes = 0
-    prev_sign = 0
-
-    for val in values:
-        current_sign = 1 if val > 0 else -1 if val < 0 else 0
-
-        if current_sign != 0:
-            if prev_sign != 0 and current_sign != prev_sign:
-                sign_changes += 1
-            prev_sign = current_sign
-
-    return sign_changes
 
 model = PPO.load(os.path.join(ppo_path,ppo_file),device='cpu',deterministic=True)
 model.set_env(env) 
@@ -47,6 +30,7 @@ start_pos = 0
 max_speed = 0
 past_rhip = []
 past_lhip = []
+fail_threshold = 1
 avg_trial_no= 3
 scenario_count = 10
 failed_experiences = 0
@@ -81,10 +65,17 @@ for ground_noise in ground_noises:
                         total_rew = 0
                         episode_len = 4 # seconds
                         max_steps = int(episode_len*(1/dt))
-                        obs, img, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps
-                                                , ground_noise=ground_noise, ground_resolution=ground_resolution, heightfield_data=heightfield_data)  # Gym API
+
                         if (angle == 0) and (scenario == 0):
+                            obs, img, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps
+                                                , ground_noise=ground_noise, ground_resolution=ground_resolution, 
+                                                heightfield_data=heightfield_data,get_image = True)  # Gym API
                             img.save(os.path.join(ppo_path, f"demo_render_{ground_noise}_{ground_resolution}.jpg"))
+                        else:
+                            obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps
+                                                , ground_noise=ground_noise, ground_resolution=ground_resolution, 
+                                                heightfield_data=heightfield_data,get_image = False)  # Gym API
+
                         start_pos = 0
                         ending_pos = 0
                         terminated = False
@@ -115,14 +106,19 @@ for ground_noise in ground_noises:
                                 mean_speed = 0
                                 success = False
                                 failed_attempts += 1
+
                         if success != False:
                             avg_mean_speeds += mean_speed
+
+                        if failed_attempts > fail_threshold:
+                            break
 
                     if total_experiences % 250 == 0:
                         print(f'{total_experiences / total_exp_no:.2%}% of {total_exp_no} experiences done for Resolution: {ground_resolution}, Amplitude: {ground_noise}')
                         print(f"Time taken for this scenario: {time.time() - t0:.2f} seconds")
                         t0 = time.time()
-                    if failed_attempts >= 2:
+                        
+                    if failed_attempts > fail_threshold:
                         avg_mean_speeds = 0
                         avg_success = 0
                     else:

@@ -43,7 +43,7 @@ class BipedEnv(gym.Env):
         self.gaitgen_net = SimpleFCNN()
         self.gaitgen_net.load_state_dict(torch.load('newnorm_final_hs512_lr0.0003_bs32_epochs10000.pth',weights_only=True))
         
-        self.normalizationconst = np.load(rf"gait reference fft5.00/newnormalization_constants.npy")
+        self.normalizationconst = np.load(rf"newnormalization_constants.npy")
         self.joint_no = p.getNumJoints(self.robot)
         self.max_torque = np.array([500,500,300,150,500,300,150])  # max torque for each joint defined in urdf file
         self.state = np.zeros(58)
@@ -53,7 +53,7 @@ class BipedEnv(gym.Env):
         self.torque_normcoeff = 500
 
     def reset(self,seed=None,test_speed = None, test_angle = None,demo_max_steps = None, 
-              ground_noise = None, ground_resolution = None,heightfield_data=None):
+              ground_noise = None, ground_resolution = None,heightfield_data=None,get_image=False):
         self.test_speed = test_speed
         self.test_angle = test_angle
         self.max_steps = int(3*(1/self.dt))
@@ -106,7 +106,7 @@ class BipedEnv(gym.Env):
         self.external_states = np.zeros(3)
         self.init_state()
         self.return_state()
-        if self.demo_mode == True:
+        if get_image == True:
             img = self.get_image()
             return self.state, img, self.reset_info
 
