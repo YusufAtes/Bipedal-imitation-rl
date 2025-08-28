@@ -1,8 +1,6 @@
 IMITATION SCALING IS ADDED TO THE NORMAL PPOENV_GUIDE FILE TO DECREASE THE IMITATION SLOWLY AND INCREASE THE FORWARD SPEED REWARD 
 
 
-
-
     policy_kwargs = dict(
         activation_fn=torch.nn.ReLU,
         net_arch=dict(pi=[256, 256], vf=[256, 256])    

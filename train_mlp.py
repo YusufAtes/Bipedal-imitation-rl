@@ -1,7 +1,3 @@
-# from pybullet_bipedenv_torquecontrolled import BipedEnv
-# from pybullet_bipedenv_poscontrolled import POS_Biped
-# from pybullett_bipedenv_trcontrol_ankle import BipedEnv
-
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import (
     CheckpointCallback,
@@ -18,7 +14,9 @@ from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3 import PPO
 import time
 from typing import Callable
+from utils import set_global_seed
 
+# set_global_seed(23)
 
 t0 = time.time()
 class RewardLoggerCallback(BaseCallback):
@@ -57,7 +55,6 @@ class RewardLoggerCallback(BaseCallback):
     def _on_training_end(self) -> None:
         # Optionally summarize results at the end of training
         print("Training finished. Total episodes:", len(self.episode_rewards))
-        print("Episode rewards:", self.episode_rewards)
 
 class CustomCheckpointCallback(BaseCallback):
     def __init__(self, save_freq, save_path,init_no = 0, verbose=0):
@@ -76,7 +73,7 @@ class CustomCheckpointCallback(BaseCallback):
             if self.verbose > 0:
                 print(f"Model saved at step {self.n_calls} to {model_path}")
                 print(f"Time taken for this checkpoint: {time.time() - t0:.2f} seconds")
-                time.sleep(15)
+                time.sleep(5)
 
         return True
     
@@ -86,21 +83,12 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
     `progress_remaining * initial_value`.
     """
     def func(progress_remaining: float) -> float:
-        return progress_remaining * initial_value 
+        return max(progress_remaining * initial_value, 1e-4)  # Ensure a minimum value
     return func
 
 namelist = ["ppo_256_256"]
 checkpoint_name = namelist[0]+".zip"
-rewar_Logger_name = namelist[0]+".csv"
-
-def cosine_schedule(initial_value: float, final_value: float):
-    """Cosine decay from *initial_value* → *final_value*.
-    SB3 passes *progress_remaining* in [1, 0]."""
-    def _fn(progress_remaining: float) -> float:
-        return final_value + (initial_value - final_value) * 0.5 * (
-            1 + cos(pi * progress_remaining)
-        )
-    return _fn
+reward_logger_name = namelist[0]+".csv"
 
 # ---------- Entropy‑decay callback ---------------------------------------------
 
@@ -125,8 +113,8 @@ class EntropyDecayCallback(BaseCallback):
 
 if __name__ == "__main__":
     # 0) RUN IDENTIFIER ---------------------------------------------------------
-    TOTAL_TIMESTEPS = 20_000_000  # ≈200 M env steps → ~48 h at 1 kHz sim rate
-    SAVE_DIR = "ppo_256_256"
+    TOTAL_TIMESTEPS = 10_000_000 # 10 million timesteps
+    SAVE_DIR = "ppo_newreward"
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     # 1) ENVIRONMENT ------------------------------------------------------------
@@ -163,21 +151,17 @@ if __name__ == "__main__":
         device="cpu",  # if you dont use cnn use cpu, if you use cnn use cuda
         tensorboard_log=SAVE_DIR,
 
-        # --- Core PPO hyper‑parameters ---------------------------------------
+        # # --- Core PPO hyper‑parameters ---------------------------------------
         n_steps=8192,
         batch_size=128,  # big minibatches for smoother advantages
-        n_epochs=10,
-
-        clip_range=0.18,  # 0.2
-        # clip_range_vf=None,
-        target_kl=0.2,  # hard KL ceiling
-
-        learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 0
-        ent_coef= 1e-3,          # no deduction constant scalar
+        n_epochs=6,
+        learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 1e-4
+        ent_coef= ENT_START,          # no deduction constant scalar
         policy_kwargs=policy_kwargs
     )
 
     # 4) TRAIN -----------------------------------------------------------------
+
     model.learn(
         total_timesteps=TOTAL_TIMESTEPS,
         callback=callback_list,
@@ -186,68 +170,4 @@ if __name__ == "__main__":
     # 5) SAVE FINAL ARTIFACTS --------------------------------------------------
     model.save(os.path.join(SAVE_DIR, "final_model"))
     print(f"Training complete. Models and logs are in: {SAVE_DIR}")
-
-# # ========== MAIN TRAINING LOOP ==========
-# if __name__ == "__main__":
-#     TOTAL_TIMESTEPS = 5_000_000
-#     SAVE_DIR      = namelist[0]
-#     os.makedirs(SAVE_DIR, exist_ok=True)
-
-#     # 1) ENVIRONMENT
-#     train_env = BipedEnv(render_mode=None)
-
-#     # 2) CALLBACKS
-#     # a) checkpoint every 500k steps
-#     checkpoint_cb = CustomCheckpointCallback(
-#         save_freq=500_000,
-#         save_path=SAVE_DIR,
-#         verbose=1,
-#     )
-#     # b) logging raw episode rewards to CSV
-#     reward_logger = RewardLoggerCallback(log_file=os.path.join(SAVE_DIR, "rewards.csv"))
-
-
-#     callback_list = [checkpoint_cb, reward_logger]
-
-#     # 3) MODEL CONFIGURATION
-#     policy_kwargs = dict(
-#         net_arch=dict(pi=[256, 256], vf=[256, 256]),
-#         # orthogonal init & layer norm could go here if desired
-#     )
-
-#     model = PPO(
-#         policy="MlpPolicy",
-#         env=train_env,
-#         device="cpu",
-#         tensorboard_log=SAVE_DIR,
-
-#         # --- General HYPERPARAMS ---        
-#         # --- KL & clipping ---
-
-#         target_kl=0.2,                           # hard KL ceiling
-#         clip_range=linear_schedule(0.3),        # decay from 0.15 → 0
-#         clip_range_vf=None,                      # keep value clipping default
-
-#         # --- Learning rate schedule ---
-#         learning_rate=linear_schedule(3e-4),
-
-#         # --- Exploration & entropy ---
-#         ent_coef=1e-3,          # high early entropy → 0
-
-#         # --- Batch / epoch control ---
-#         n_steps=4096,                             # longer rollout for smoother adv
-#         batch_size=128,                           # big minibatches
-#         n_epochs=6,                               # fewer passes per rollout
-
-#         policy_kwargs=policy_kwargs,
-#     )
-
-#     # 4) TRAIN
-#     model.learn(
-#         total_timesteps=TOTAL_TIMESTEPS,
-#         callback=callback_list,
-#     )
-
-#     # 5) SAVE final model & stats
-#     model.save(os.path.join(SAVE_DIR, "final_model"))
-#     print("Training complete. Models and logs are in:", SAVE_DIR)
+    print(f"Total training time: {time.time() - t0:.2f} seconds")       

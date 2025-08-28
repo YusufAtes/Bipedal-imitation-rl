@@ -23,48 +23,66 @@ joint_idx = [2]
 cubeStartPos = [0, 0, 1.185]
 cubeStartOrientation = p.getQuaternionFromEuler([0., 0., 0.])
 robot = p.loadURDF("assets/biped2d.urdf", cubeStartPos, cubeStartOrientation)
-p.setJointMotorControlArray(robot,[0,1,2,3,4,5,6,7,8], p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0])
-hip_init = 0.4
-knee_init = -0.25
-p.resetJointState(robot, 3, targetValue = 0)
-p.resetJointState(robot, 4, targetValue = 0)
-p.resetJointState(robot, 5, targetValue = 0)
-# if left_flat:
-#     self.p.resetJointState(self.robot, 5, targetValue = 0)
-# else:
-#     self.p.resetJointState(self.robot, 5, targetValue = -(rhip_pos+ rknee_pos))
+base_name = p.getBodyInfo(robot)[0].decode("utf-8")
 
-p.resetJointState(robot, 6, targetValue = 0)
-p.resetJointState(robot, 7, targetValue = 0)
-p.resetJointState(robot, 8, targetValue = 0)
-# cubeStartPos = [0, 0, -0.3]
-# cubeStartOrientation = p.getQuaternionFromEuler([0., 0., 0.])
-# robot = p.loadURDF("assets/biped2d_pybullet.urdf")
-# Get number of joints
-num_joints = p.getNumJoints(robot)
-for i in range(num_joints):
-    joint_info = p.getJointInfo(robot, i)
-    joint_name = joint_info[1].decode('utf-8')  # Decode joint name
-    print(f"Joint ID: {i}, Joint Name: {joint_name}")
-time.sleep(1)
-# p.setJointMotorControl2(robot,joint_id, p.VELOCITY_CONTROL, force=0)
-# p.enableJointForceTorqueSensor(robot, joint_id)
-# # p.setTimeStep(1/1000)
-# print('==========================')
-for i in range(1000):
-    # p.setJointMotorControl2(robot, joint_id, p.TORQUE_CONTROL, force=-200)
-    # p.setJointMotorControlArray(robot, joint_idx, controlMode=p.TORQUE_CONTROL, forces=[-200])
-    p.setJointMotorControl2(robot, 2, controlMode=p.TORQUE_CONTROL, force=1000)
-    p.stepSimulation()
-    a = p.getContactPoints(robot, planeId)
-    time.sleep(0.1)
-# print('Simulation done')
-# time.sleep(3)
-# # # Print joint names and IDs
-# # print("Joint Information:")
-# # for joint_id in range(num_joints):
-# #     joint_info = p.getJointInfo(robot, joint_id)
-# #     joint_name = joint_info[1].decode('utf-8')  # Decode joint name
-# #     print(f"Joint ID: {joint_id}, Joint Name: {joint_name}")
-# #     if joint_info[2] == p.JOINT_REVOLUTE:  # Ensure it's a revolute joint
-# #         p.setJointMotorControl2(robot, joint_id, p.POSITself.planeId = p.loadURDF("assets/pla
+
+# Collect all link names
+link_names = { -1: base_name }  # Base link
+
+for joint_index in range(p.getNumJoints(robot)):
+    joint_info = p.getJointInfo(robot, joint_index)
+    link_name = joint_info[12].decode("utf-8")
+    link_names[joint_index] = link_name
+
+# Print result
+for index, name in link_names.items():
+    print(f"Link index {index}: {name}")
+
+
+
+
+# p.setJointMotorControlArray(robot,[0,1,2,3,4,5,6,7,8], p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0])
+# hip_init = 0.4
+# knee_init = -0.25
+# p.resetJointState(robot, 3, targetValue = 0)
+# p.resetJointState(robot, 4, targetValue = 0)
+# p.resetJointState(robot, 5, targetValue = 0)
+# # if left_flat:
+# #     self.p.resetJointState(self.robot, 5, targetValue = 0)
+# # else:
+# #     self.p.resetJointState(self.robot, 5, targetValue = -(rhip_pos+ rknee_pos))
+
+# p.resetJointState(robot, 6, targetValue = 0)
+# p.resetJointState(robot, 7, targetValue = 0)
+# p.resetJointState(robot, 8, targetValue = 0)
+# # cubeStartPos = [0, 0, -0.3]
+# # cubeStartOrientation = p.getQuaternionFromEuler([0., 0., 0.])
+# # robot = p.loadURDF("assets/biped2d_pybullet.urdf")
+# # Get number of joints
+# num_joints = p.getNumJoints(robot)
+# for i in range(num_joints):
+#     joint_info = p.getJointInfo(robot, i)
+#     joint_name = joint_info[1].decode('utf-8')  # Decode joint name
+#     print(f"Joint ID: {i}, Joint Name: {joint_name}")
+# time.sleep(1)
+# # p.setJointMotorControl2(robot,joint_id, p.VELOCITY_CONTROL, force=0)
+# # p.enableJointForceTorqueSensor(robot, joint_id)
+# # # p.setTimeStep(1/1000)
+# # print('==========================')
+# for i in range(1000):
+#     # p.setJointMotorControl2(robot, joint_id, p.TORQUE_CONTROL, force=-200)
+#     # p.setJointMotorControlArray(robot, joint_idx, controlMode=p.TORQUE_CONTROL, forces=[-200])
+#     p.setJointMotorControl2(robot, 2, controlMode=p.TORQUE_CONTROL, force=1000)
+#     p.stepSimulation()
+#     a = p.getContactPoints(robot, planeId)
+#     time.sleep(0.1)
+# # print('Simulation done')
+# # time.sleep(3)
+# # # # Print joint names and IDs
+# # # print("Joint Information:")
+# # # for joint_id in range(num_joints):
+# # #     joint_info = p.getJointInfo(robot, joint_id)
+# # #     joint_name = joint_info[1].decode('utf-8')  # Decode joint name
+# # #     print(f"Joint ID: {joint_id}, Joint Name: {joint_name}")
+# # #     if joint_info[2] == p.JOINT_REVOLUTE:  # Ensure it's a revolute joint
+# # #         p.setJointMotorControl2(robot, joint_id, p.POSITself.planeId = p.loadURDF("assets/pla
