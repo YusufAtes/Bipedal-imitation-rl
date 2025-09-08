@@ -16,7 +16,14 @@ import time
 from typing import Callable
 from utils import set_global_seed
 
-# set_global_seed(23)
+os.environ["PYTHONHASHSEED"] = "23"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
+torch.set_num_threads(1)
+set_global_seed(23, deterministic=True)
 
 t0 = time.time()
 class RewardLoggerCallback(BaseCallback):
@@ -73,7 +80,6 @@ class CustomCheckpointCallback(BaseCallback):
             if self.verbose > 0:
                 print(f"Model saved at step {self.n_calls} to {model_path}")
                 print(f"Time taken for this checkpoint: {time.time() - t0:.2f} seconds")
-                time.sleep(5)
 
         return True
     
@@ -113,12 +119,12 @@ class EntropyDecayCallback(BaseCallback):
 
 if __name__ == "__main__":
     # 0) RUN IDENTIFIER ---------------------------------------------------------
-    TOTAL_TIMESTEPS = 10_000_000 # 10 million timesteps
+    TOTAL_TIMESTEPS = 15_000_000 # 15 million timesteps
     SAVE_DIR = "ppo_newreward"
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     # 1) ENVIRONMENT ------------------------------------------------------------
-    train_env = BipedEnv(render_mode=None)
+    train_env = BipedEnv()
     # If you have a CurriculumWrapper defined, enable it like this:
     # train_env = CurriculumWrapper(train_env)
 
@@ -153,8 +159,12 @@ if __name__ == "__main__":
 
         # # --- Core PPO hyper‑parameters ---------------------------------------
         n_steps=8192,
-        batch_size=128,  # big minibatches for smoother advantages
-        n_epochs=6,
+        batch_size=256,  # big minibatches for smoother advantages
+        n_epochs=5,
+        clip_range=0.15,  # 0.2
+        # clip_range_vf=None,
+        target_kl=0.2,  # hard KL ceiling
+
         learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 1e-4
         ent_coef= ENT_START,          # no deduction constant scalar
         policy_kwargs=policy_kwargs

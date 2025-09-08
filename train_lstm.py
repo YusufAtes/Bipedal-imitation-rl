@@ -14,7 +14,7 @@ from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3 import PPO
 import time
 from typing import Callable
-from seed_utils import set_global_seed
+from utils import set_global_seed
 from sb3_contrib import RecurrentPPO
 set_global_seed(23)
 
@@ -113,8 +113,8 @@ class EntropyDecayCallback(BaseCallback):
 
 if __name__ == "__main__":
     # 0) RUN IDENTIFIER ---------------------------------------------------------
-    TOTAL_TIMESTEPS = 10_000_000 # 10 million timesteps
-    SAVE_DIR = "ppo_custom_arch"
+    TOTAL_TIMESTEPS = 15_000_000 # 15 million timesteps
+    SAVE_DIR = "ppo_lstm"
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     # 1) ENVIRONMENT ------------------------------------------------------------
@@ -145,17 +145,22 @@ if __name__ == "__main__":
         policy="MlpLstmPolicy",            # or "CnnLstmPolicy", "MultiInputLstmPolicy"
         env=train_env,
         n_steps=8192,
-        batch_size=128,  # big minibatches for smoother advantages
-        n_epochs=6,
+        batch_size=256,  # big minibatches for smoother advantages
+        n_epochs=5,
+        clip_range=0.15,  # 0.2
+        # clip_range_vf=None,
+        target_kl=0.2,  # hard KL ceiling
+
         learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 1e-4
         ent_coef= ENT_START,          # no deduction constant scalar
+        
         policy_kwargs=dict(
-            lstm_hidden_size=256,          # size of recurrent state
+            lstm_hidden_size=128,          # size of recurrent state
             n_lstm_layers=1,               # stack more layers if needed
             shared_lstm=False,             # separate actor/critic LSTM towers
-            enable_critic_lstm=True,       # keep critic recurrent
+            enable_critic_lstm=False,       # keep critic recurrent
             activation_fn=torch.nn.ReLU,
-            net_arch=dict(pi=[256, 256], vf=[256, 256]) 
+            net_arch=dict(pi=[256], vf=[256,256]) 
             # lstm_kwargs={}               # extra nn.LSTM kwargs if needed
         ),
         tensorboard_log=SAVE_DIR,
@@ -166,12 +171,12 @@ if __name__ == "__main__":
     # 4) TRAIN -----------------------------------------------------------------
 
 
-    # model.learn(
-    #     total_timesteps=TOTAL_TIMESTEPS,
-    #     callback=callback_list,
-    # )
+    model.learn(
+        total_timesteps=TOTAL_TIMESTEPS,
+        callback=callback_list,
+    )
 
-    # # 5) SAVE FINAL ARTIFACTS --------------------------------------------------
-    # model.save(os.path.join(SAVE_DIR, "final_model"))
-    # print(f"Training complete. Models and logs are in: {SAVE_DIR}")
-    # print(f"Total training time: {time.time() - t0:.2f} seconds")       
+    # 5) SAVE FINAL ARTIFACTS --------------------------------------------------
+    model.save(os.path.join(SAVE_DIR, "final_model"))
+    print(f"Training complete. Models and logs are in: {SAVE_DIR}")
+    print(f"Total training time: {time.time() - t0:.2f} seconds")       

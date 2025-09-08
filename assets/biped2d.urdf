@@ -229,7 +229,7 @@
         <box size="0.06 0.185 .04"/>
       </geometry>
       <origin rpy="0 0 0" xyz="0.0 0.09 -0.03"/>
-      <contact_coefficients mu="0.65" />
+      <contact_coefficients mu="0.85" />
     </collision>
     <inertial>
       <mass value="1"/>
@@ -260,7 +260,7 @@
         <box size="0.06 0.185 .04"/>
       </geometry>
       <origin rpy="0 0 0" xyz="-0.0 0.09 -0.03"/>
-      <contact_coefficients mu="0.65" />
+      <contact_coefficients mu="0.85" />
     </collision>
     <inertial>
       <mass value="1"/>

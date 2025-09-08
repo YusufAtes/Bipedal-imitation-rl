@@ -4,6 +4,7 @@ import random
 import numpy as np
 import torch
 from scipy.interpolate import CubicSpline
+import matplotlib.pyplot as plt
 def set_global_seed(seed: int = 42, deterministic: bool = True) -> None:
     """
     Fixes RNG seeds across random, numpy and torch.
@@ -43,28 +44,3 @@ def set_global_seed(seed: int = 42, deterministic: bool = True) -> None:
 
     # -------- Informative print (optional) -----------------------------------
     print(f"Global seed set to {seed} (deterministic={deterministic})")
-
-# Example usage ---------------------------------------------------------------
-
-def create_noisy_plane(gamma,omega, row_size = 32, col_size = 1024,simulation_res = 0.05):    #5 cm resolutions defined for the simulation
-    # Create the plane
-    full_plane = np.zeros(col_size)
-    end_point = col_size * simulation_res 
-    mid_point = end_point / 2
-
-    plane_coarse = np.arange(mid_point + gamma, end_point, gamma)
-    plane_fine = np.arange(mid_point + gamma , end_point, simulation_res)
-    plane = np.zeros(len(plane_coarse))
-    prev_height = 0.0
-    for i in range(len(plane_coarse)):
-        #truncated normal noise
-        noise = np.random.normal()  # Adjust the standard
-        noise = np.clip(noise, -omega, omega)  # Clip to a range
-        height = prev_height + noise
-        plane[i] = height
-        prev_height = height
-    cs = CubicSpline(plane_coarse, plane, bc_type='natural')
-    full_plane[-len(plane_fine):] = cs(plane_fine)
-    full_plane_data = np.repeat(full_plane, row_size)  # Repeat the plane data for each row
-
-    return full_plane_data
