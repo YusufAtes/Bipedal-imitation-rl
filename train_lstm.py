@@ -160,11 +160,11 @@ if __name__ == "__main__":
             shared_lstm=False,             # separate actor/critic LSTM towers
             enable_critic_lstm=False,       # keep critic recurrent
             activation_fn=torch.nn.ReLU,
-            net_arch=dict(pi=[256], vf=[256,256]) 
+            net_arch=dict(pi=[256,256], vf=[256,256]) 
             # lstm_kwargs={}               # extra nn.LSTM kwargs if needed
         ),
         tensorboard_log=SAVE_DIR,
-        device="cpu",
+        device="cuda",
     )
     print(model.policy)
 
