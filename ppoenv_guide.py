@@ -22,14 +22,7 @@ class BipedEnv(gym.Env):
         self.demo_mode = demo_mode
         self.demo_type = demo_type
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        if self.demo_mode == True:
-            p.setPhysicsEngineParameter(
-                fixedTimeStep       = 1.0/1000.0,
-                numSolverIterations = 100,
-                deterministicOverlappingPairs = 1,
-                enableConeFriction  = 0
-            )           
-        
+
         self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
         self.planeId = p.loadURDF("plane.urdf",physicsClientId=self.physics_client)
         self.leg_len = 0.94
@@ -63,7 +56,22 @@ class BipedEnv(gym.Env):
         self.test_angle = test_angle
         self.max_steps = int(3*(1/self.dt))
         self.t = 0
+
         p.resetSimulation(physicsClientId=self.physics_client)
+        p.setGravity(0,0,-9.81)
+        p.setTimeStep(self.dt)
+        if self.demo_mode == True:
+            p.setPhysicsEngineParameter(
+                fixedTimeStep       = 1.0/1000.0,
+                numSolverIterations = 100,
+                deterministicOverlappingPairs = 1,
+                enableConeFriction  = 0
+            )           
+        
+            p.setPhysicsEngineParameter(numSubSteps=0) # OR a fixed, high value
+            p.setPhysicsEngineParameter(enableFileCaching=0) # Prevents reading from disk, which can have timing issues
+
+
         speed_limit = 2.2 #np.clip(self.step_counter/3_500_000,0,1.9) + 0.7
         ramp_Limit = 5 #np.clip(self.step_counter/1_200_000,0,5)
 
@@ -91,7 +99,7 @@ class BipedEnv(gym.Env):
 
         if self.demo_mode == False:
             self.planeId = p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
-            p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+            p.changeDynamics(self.planeId, -1, lateralFriction=1.0,enableFrictionAnchor=1)
         else:
             if (ground_noise != None):
                 self.init_noisy_plane(ground_resolution=ground_resolution, noise_level=ground_noise,baseOrientation=plane_orientation,
@@ -99,7 +107,7 @@ class BipedEnv(gym.Env):
                 self.heightfield_data = heightfield_data
             else:
                 self.planeId = p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
-                p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+                p.changeDynamics(self.planeId, -1, lateralFriction=1.0,enableFrictionAnchor=1)
 
 
         self.reset_info = {'current state':self.state}
@@ -339,7 +347,6 @@ class BipedEnv(gym.Env):
 
     def starting_height(self,hip_init,knee_init,ankle_init):
 
-
         upper_len = 0.45
         lower_len = 0.45
         foot_len = 0.09
@@ -353,10 +360,9 @@ class BipedEnv(gym.Env):
     
 
     def init_state(self):
+
         if self.demo_mode == False:
-
             start_idx = np.random.randint(0,500)
-
             # self.max_steps = self.max_steps - start_idx
             self.reference_idx = start_idx
 
@@ -404,7 +410,6 @@ class BipedEnv(gym.Env):
             lknee_pos = 0.0
             lankle_pos = 0.0
             
-
             init_z = self.starting_height(rhip_pos,lhip_pos,rankle_pos)
             del self.robot
             self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]))
@@ -416,9 +421,6 @@ class BipedEnv(gym.Env):
             p.resetJointState(self.robot, 6, targetValue = lhip_pos)
             p.resetJointState(self.robot, 7, targetValue = lknee_pos)
             p.resetJointState(self.robot, 8, targetValue = lankle_pos)
-
-        p.setGravity(0,0,-9.81)
-        p.setTimeStep(self.dt)
 
         self.t1_torso_pos = p.getJointState(self.robot, 2)[0]
         self.t1_rhip_pos = p.getJointState(self.robot, 3)[0]
@@ -570,7 +572,7 @@ class BipedEnv(gym.Env):
             physicsClientId=self.physics_client
         )
 
-        p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+        p.changeDynamics(self.planeId, -1, lateralFriction=1.0,enableFrictionAnchor=1)
 
     def get_image(self):
         view_matrix = p.computeViewMatrix(

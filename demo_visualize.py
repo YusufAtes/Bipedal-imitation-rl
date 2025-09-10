@@ -6,7 +6,7 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ppo_path = "ppo_lstm/RecurrentPPO_3"
+ppo_path = "ppo_newreward/PPO_41"
 env = BipedEnv(demo_mode=True,render_mode="human")
 # ppo_file = "model_checkpoint_26ppo_256_256.zip"
 ppo_file = "final_model.zip"

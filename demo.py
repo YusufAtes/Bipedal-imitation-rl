@@ -7,7 +7,7 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # Needed for 3D plotting
-
+import plot_utils
 
 #INSTEAD OF SUCCES RATE ADD HOW MANY METERS IT TRAVELED
 def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
@@ -15,12 +15,13 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
               ppo_path=None,ppo_file="final_model.zip",demo_type="rotation",
               ppo_type="mlp"):
     
-    speeds = np.linspace(0.2, 2.1, speed_len)
-    angles = np.linspace(-12, 12, angle_len)
+    speeds = np.linspace(0.2, 2.0, speed_len)
+    angles = np.linspace(-15, 15, angle_len)
 
     noise_levels = np.arange(1,20,1)
     gammas = [0.5, 1.0, 1.5, 2.0]  # Different resolutions for the ground
-
+    record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
+                                        "resolution","success","max range","trial_no"])
     if demo_type == "noisy":
         env = BipedEnv(demo_mode=True, demo_type=demo_type, render_mode= None)
         model = PPO.load(os.path.join(ppo_path,ppo_file),device='cpu',deterministic=True)
@@ -118,57 +119,136 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                         exp_speeds[speed_no, noise_level-1] += avg_mean_speeds
                         exp_success[speed_no, noise_level-1] += avg_success
                         exp_ranges[speed_no, noise_level-1] += max_range
-
-            exp_speeds = exp_speeds.T      # swap axes so it matches meshgrid
+                        # Record data
+                        record_data = pd.concat([record_data, pd.DataFrame([{"demo type": demo_type, "cmd speed": desired_speed, "angle": angle,
+                                            "mean speed": avg_mean_speeds,"noise level": noise_level,
+                                            "resolution": gamma,"success": avg_success,"max range": max_range,
+                                            "trial_no": None}])], ignore_index=True)
+            exp_speeds = exp_speeds.T
             exp_success = exp_success.T
             exp_ranges = exp_ranges.T
 
             exp_speeds /= scenario_count
             exp_success /= scenario_count
 
+            ### Speed Plot      --------------------------------------------------------
             S, A = np.meshgrid(speeds, noise_levels)
+            x = S.ravel()
+            y = A.ravel()
+            cvals = exp_speeds.ravel()
+            fig, ax = plt.subplots(figsize=(8, 6))
 
-            exp_speeds = exp_speeds.flatten()
-            exp_success = exp_success.flatten()
-            exp_ranges = exp_ranges.flatten()
+            # --- key part: compute a marker size that fills each (speed, angle) cell ---
+            uniq_x = np.unique(x)
+            uniq_y = np.unique(y)
+            dx = np.diff(uniq_x).min()
+            dy = np.diff(uniq_y).min()
 
-            # Mean Speed Plot
-            plt.figure(figsize=(8, 6))
-            mean_speed_plot = plt.scatter(S.ravel(), A.ravel(),
-                                        c=exp_speeds.ravel(), cmap='Blues', edgecolors='k',marker='o',s=50)
-            # Add colorbar
-            speed_cbar = plt.colorbar(mean_speed_plot)
+            # convert cell size in data units -> points^2 for scatter 's'
+            (x0, y0) = ax.transData.transform((0, 0))
+            (x1, y1) = ax.transData.transform((dx, dy))
+            cell_px = min(abs(x1 - x0), abs(y1 - y0))           # pixel size of the smaller step
+            cell_pt = cell_px * 72.0 / fig.dpi                  # pixels -> points
+            marker_area = (cell_pt * 0.98) ** 2                 # 98% of cell, fill with slight overlap
+
+            sc = ax.scatter(
+                x, y,
+                c=cvals,
+                cmap='Blues',
+                marker='s',             # squares tile the grid
+                s=marker_area,          # fills each cell
+                linewidths=0,
+                edgecolors='none'
+            )
+
+            # colorbar + labels
+            speed_cbar = plt.colorbar(sc, ax=ax)
             speed_cbar.set_label('Mean Speed')
-            plt.xlabel('Speed Value')
-            plt.ylabel('Noise Level')
-            plt.title(f'Speed versus Noise Level')
-            plt.savefig(os.path.join(ppo_path, f"demo_avg_speeds_{scenario_mode}_{gamma}.png"))
+            ax.set_xlabel('Speed Value')
+            ax.set_ylabel('Noise Level')
+            ax.set_title('Avg Speed Plot')
+
+            plt.savefig(os.path.join(ppo_path, f"demo_avg_speed_{scenario_mode}_{gamma}.png"), bbox_inches="tight")
             plt.close()
 
-            # Success Plot
-            plt.figure(figsize=(8, 6))
-            avg_success_plot = plt.scatter(S.ravel(), A.ravel(), 
-                                        c=exp_success.ravel(), cmap='Greens', edgecolors='k',marker='o',s=50)
-            plt.xlabel('Speed Value')
-            plt.ylabel('Noise Level')
-            plt.title(f'Experiment Success without Fall')
-            # Add colorbar
-            success_cbar = plt.colorbar(avg_success_plot)
-            success_cbar.set_label('Success Rate')
-            plt.savefig(os.path.join(ppo_path, f"demo_avg_success_{scenario_mode}_{gamma}.png"))
+            ### Success Plot      --------------------------------------------------------
+            S, A = np.meshgrid(speeds, noise_levels)
+            x = S.ravel()
+            y = A.ravel()
+            cvals = exp_success.ravel()
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            # --- key part: compute a marker size that fills each (speed, angle) cell ---
+            uniq_x = np.unique(x)
+            uniq_y = np.unique(y)
+            dx = np.diff(uniq_x).min()
+            dy = np.diff(uniq_y).min()
+
+            # convert cell size in data units -> points^2 for scatter 's'
+            (x0, y0) = ax.transData.transform((0, 0))
+            (x1, y1) = ax.transData.transform((dx, dy))
+            cell_px = min(abs(x1 - x0), abs(y1 - y0))           # pixel size of the smaller step
+            cell_pt = cell_px * 72.0 / fig.dpi                  # pixels -> points
+            marker_area = (cell_pt * 0.98) ** 2                 # 98% of cell, fill with slight overlap
+
+            sc = ax.scatter(
+                x, y,
+                c=cvals,
+                cmap='Greens',
+                marker='s',             # squares tile the grid
+                s=marker_area,          # fills each cell
+                linewidths=0,
+                edgecolors='none'
+            )
+
+            # colorbar + labels
+            speed_cbar = plt.colorbar(sc, ax=ax)
+            speed_cbar.set_label('Success Rate')
+            ax.set_xlabel('Speed Value')
+            ax.set_ylabel('Noise Level')
+            ax.set_title('Success Rate Plot')
+
+            plt.savefig(os.path.join(ppo_path, f"demo_avg_success_{scenario_mode}_{gamma}.png"), bbox_inches="tight")
             plt.close()
 
-            # Range Plot
-            plt.figure(figsize=(8, 6))
-            avg_range_plot = plt.scatter(S.ravel(), A.ravel(), 
-                                        c=exp_ranges.ravel(), cmap='Oranges', edgecolors='k',marker='o',s=50)
-            plt.xlabel('Speed Value')
-            plt.ylabel('Noise Level')
-            plt.title(f'Total Distance Covered')
-            # Add colorbar
-            range_cbar = plt.colorbar(avg_range_plot)
-            range_cbar.set_label('Max Range (m)')
-            plt.savefig(os.path.join(ppo_path, f"demo_avg_range_{scenario_mode}_{gamma}.png"))
+            ### Range Plot      --------------------------------------------------------
+            S, A = np.meshgrid(speeds, noise_levels)
+            x = S.ravel()
+            y = A.ravel()
+            cvals = exp_ranges.ravel()
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            # --- key part: compute a marker size that fills each (speed, angle) cell ---
+            uniq_x = np.unique(x)
+            uniq_y = np.unique(y)
+            dx = np.diff(uniq_x).min()
+            dy = np.diff(uniq_y).min()
+
+            # convert cell size in data units -> points^2 for scatter 's'
+            (x0, y0) = ax.transData.transform((0, 0))
+            (x1, y1) = ax.transData.transform((dx, dy))
+            cell_px = min(abs(x1 - x0), abs(y1 - y0))           # pixel size of the smaller step
+            cell_pt = cell_px * 72.0 / fig.dpi                  # pixels -> points
+            marker_area = (cell_pt * 0.98) ** 2                 # 98% of cell, fill with slight overlap
+
+            sc = ax.scatter(
+                x, y,
+                c=cvals,
+                cmap='Oranges',
+                marker='s',             # squares tile the grid
+                s=marker_area,          # fills each cell
+                linewidths=0,
+                edgecolors='none'
+            )
+
+            # colorbar + labels
+            speed_cbar = plt.colorbar(sc, ax=ax)
+            speed_cbar.set_label(' Max Range Travelled (m)')
+            ax.set_xlabel('Speed Value')
+            ax.set_ylabel('Noise Level')
+            ax.set_title('Max Range Plot')
+
+            plt.savefig(os.path.join(ppo_path, f"demo_avg_range_{scenario_mode}_{gamma}.png"), bbox_inches="tight")
             plt.close()
 
     elif demo_type == "vel_diff":
@@ -184,7 +264,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
             failed_attempts = 0
             avg_mean_speeds = 0
 
-            for trials in range(trial_no):
+            for trial in range(trial_no):
                 desired_speed = speed_range[speed_no]
                 angle = 0.0
 
@@ -224,6 +304,11 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
 
             actual_speeds[speed_no] = avg_mean_speeds / (trial_no - failed_attempts)
 
+            record_data = pd.concat([record_data, pd.DataFrame([{"demo type": demo_type, "cmd speed": desired_speed, "angle": None,
+                "mean speed": actual_speeds[speed_no],"noise level": None,
+                "resolution": None,"success": success,"max range": None,
+                "trial_no": None}])], ignore_index=True)
+            
         # plot the results of the demo make the x axis the speed and the y axis the angle and the color the distance and make the failures red
         plt.figure(figsize=(8, 6))
         plt.plot(speed_range, actual_speeds)
@@ -315,39 +400,101 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                     exp_speeds[speed_no, angle_no] += avg_mean_speeds
                     exp_success[speed_no, angle_no] += avg_success
 
-        exp_speeds = exp_speeds.T      # swap axes so it matches meshgrid
+                    record_data = pd.concat([record_data, pd.DataFrame([{"demo type": demo_type, "cmd speed": desired_speed, "angle": angle,
+                        "mean speed": avg_mean_speeds,"noise level": None,
+                        "resolution": None,"success": avg_success,"max range": None,
+                        "trial_no": None}])], ignore_index=True)
+
+        exp_speeds = exp_speeds.T
         exp_success = exp_success.T
         exp_speeds /= scenario_count
         exp_success /= scenario_count
+
         S, A = np.meshgrid(speeds, angles)
-        exp_speeds = exp_speeds.flatten()
-        exp_success = exp_success.flatten()
+        x = S.ravel()
+        y = A.ravel()
+        cvals = exp_speeds.ravel()
 
-        # plot the results of the demo make the x axis the speed and the y axis the angle and the color the distance and make the failures red
-        plt.figure(figsize=(8, 6))
-        mean_speed_plot = plt.scatter(S.ravel(), A.ravel(),
-                            c=exp_speeds.ravel(), cmap='Blues', edgecolors='k',marker='o',s=50)
-        # Add colorbar
-        speed_cbar = plt.colorbar(mean_speed_plot)
+        # figure/axes
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        # --- key part: compute a marker size that fills each (speed, angle) cell ---
+        uniq_x = np.unique(x)
+        uniq_y = np.unique(y)
+        dx = np.diff(uniq_x).min()
+        dy = np.diff(uniq_y).min()
+
+        # convert cell size in data units -> points^2 for scatter 's'
+        (x0, y0) = ax.transData.transform((0, 0))
+        (x1, y1) = ax.transData.transform((dx, dy))
+        cell_px = min(abs(x1 - x0), abs(y1 - y0))           # pixel size of the smaller step
+        cell_pt = cell_px * 72.0 / fig.dpi                  # pixels -> points
+        marker_area = (cell_pt * 0.98) ** 2                 # 98% of cell, fill with slight overlap
+
+        sc = ax.scatter(
+            x, y,
+            c=cvals,
+            cmap='Blues',
+            marker='s',             # squares tile the grid
+            s=marker_area,          # fills each cell
+            linewidths=0,
+            edgecolors='none'
+        )
+
+        # colorbar + labels
+        speed_cbar = plt.colorbar(sc, ax=ax)
         speed_cbar.set_label('Mean Speed')
-        plt.xlabel('Speed Value')
-        plt.ylabel('Ramp Angle')
-        plt.title(f'Avg Speed Plot')
-        plt.savefig(os.path.join(ppo_path, f"demo_avg_speeds.png"))
+        ax.set_xlabel('Speed Value')
+        ax.set_ylabel('Ramp Angle')
+        ax.set_title('Avg Speed Plot')
+        
+        plt.savefig(os.path.join(ppo_path, "demo_avg_speeds.png"), bbox_inches="tight")
         plt.close()
 
 
-        plt.figure(figsize=(8, 6))
-        avg_success_plot = plt.scatter(S.ravel(), A.ravel(), c=exp_success.ravel(), cmap='Greens', 
-                                       edgecolors='k',marker='o',s=50)
-        plt.xlabel('Speed Value')
-        plt.ylabel('Ramp Angle')
-        plt.title(f'Avg Success Plot')
-        # Add colorbar
-        success_cbar = plt.colorbar(avg_success_plot)
-        success_cbar.set_label('Success Rate')
-        plt.savefig(os.path.join(ppo_path, f"demo_avg_success.png"))
+        # # Success Plot
+        S, A = np.meshgrid(speeds, angles)
+        x = S.ravel()
+        y = A.ravel()
+        cvals = exp_success.ravel()
+
+        # figure/axes
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        # --- key part: compute a marker size that fills each (speed, angle) cell ---
+        uniq_x = np.unique(x)
+        uniq_y = np.unique(y)
+        dx = np.diff(uniq_x).min()
+        dy = np.diff(uniq_y).min()
+
+        # convert cell size in data units -> points^2 for scatter 's'
+        (x0, y0) = ax.transData.transform((0, 0))
+        (x1, y1) = ax.transData.transform((dx, dy))
+        cell_px = min(abs(x1 - x0), abs(y1 - y0))           # pixel size of the smaller step
+        cell_pt = cell_px * 72.0 / fig.dpi                  # pixels -> points
+        marker_area = (cell_pt * 0.98) ** 2                 # 98% of cell, fill with slight overlap
+
+        sc = ax.scatter(
+            x, y,
+            c=cvals,
+            cmap='Greens',
+            marker='s',             # squares tile the grid
+            s=marker_area,          # fills each cell
+            linewidths=0,
+            edgecolors='none'
+        )
+
+        # colorbar + labels
+        speed_cbar = plt.colorbar(sc, ax=ax)
+        speed_cbar.set_label('Success Rate')
+        ax.set_xlabel('Speed Value')
+        ax.set_ylabel('Ramp Angle')
+        ax.set_title('Avg Success Plot')
+
+        plt.savefig(os.path.join(ppo_path, "demo_avg_success.png"), bbox_inches="tight")
         plt.close()
+
+    record_data.to_csv(os.path.join(ppo_path, f"demo_data_{demo_type}_{ppo_type}_{scenario_mode}.csv"), index=False)
 
     env.close()
 if __name__ == "__main__":
@@ -357,15 +504,15 @@ if __name__ == "__main__":
     # # Noisy demo
     # # ----------------------------     DEFINE PARAMS     ----------------------------
 
-    ppo_type = "lstm"                # "lstm" or "mlp"
+    ppo_type = "mlp"                # "lstm" or "mlp"
     demo_type = "vel_diff"          # "rotation" or "noisy"
 
-    ppo_path = "ppo_lstm/RecurrentPPO_3"
+    ppo_path = "ppo_newreward/PPO_40"
     ppo_file = "final_model.zip"
 
     scenario_mode = 0
-    speed_len = 18
-    angle_len = 51
+    speed_len = 21
+    angle_len = 55
 
     episode_len = 4 # seconds
     fail_threshold = 1
