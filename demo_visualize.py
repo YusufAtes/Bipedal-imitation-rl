@@ -1,4 +1,4 @@
-from ppo_demoenv import BipedEnv
+from ppoenv_guide import BipedEnv
 import os
 import numpy as np
 from stable_baselines3 import PPO
@@ -6,7 +6,7 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ppo_path = "ppo_newreward/PPO_41"
+ppo_path = "ppo_newreward/PPO_39"
 env = BipedEnv(demo_mode=True,render_mode="human")
 # ppo_file = "model_checkpoint_26ppo_256_256.zip"
 ppo_file = "final_model.zip"

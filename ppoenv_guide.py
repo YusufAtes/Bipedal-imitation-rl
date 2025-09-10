@@ -99,7 +99,7 @@ class BipedEnv(gym.Env):
 
         if self.demo_mode == False:
             self.planeId = p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
-            p.changeDynamics(self.planeId, -1, lateralFriction=1.0,enableFrictionAnchor=1)
+            p.changeDynamics(self.planeId, -1, lateralFriction=1.0,frictionAnchor=1)
         else:
             if (ground_noise != None):
                 self.init_noisy_plane(ground_resolution=ground_resolution, noise_level=ground_noise,baseOrientation=plane_orientation,
@@ -107,7 +107,7 @@ class BipedEnv(gym.Env):
                 self.heightfield_data = heightfield_data
             else:
                 self.planeId = p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
-                p.changeDynamics(self.planeId, -1, lateralFriction=1.0,enableFrictionAnchor=1)
+                p.changeDynamics(self.planeId, -1, lateralFriction=1.0,frictionAnchor=1)
 
 
         self.reset_info = {'current state':self.state}
@@ -572,7 +572,7 @@ class BipedEnv(gym.Env):
             physicsClientId=self.physics_client
         )
 
-        p.changeDynamics(self.planeId, -1, lateralFriction=1.0,enableFrictionAnchor=1)
+        p.changeDynamics(self.planeId, -1, lateralFriction=1.0,frictionAnchor=1)
 
     def get_image(self):
         view_matrix = p.computeViewMatrix(
