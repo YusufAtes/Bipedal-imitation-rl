@@ -317,8 +317,10 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
 
         exp_speeds = exp_speeds.T      # swap axes so it matches meshgrid
         exp_success = exp_success.T
+
         exp_speeds /= scenario_count
         exp_success /= scenario_count
+        
         S, A = np.meshgrid(speeds, angles)
         exp_speeds = exp_speeds.flatten()
         exp_success = exp_success.flatten()
@@ -376,12 +378,12 @@ if __name__ == "__main__":
 
     # # ----------------------------     END PARAMS     ----------------------------
 
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
-    print("Vel diff demo done, starting rotation demo now...")
-    print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
+    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+    #             demo_type=demo_type,ppo_type=ppo_type)
+    # print("Vel diff demo done, starting rotation demo now...")
+    # print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
 
     t0 = time.time()
     demo_type = "rotation"

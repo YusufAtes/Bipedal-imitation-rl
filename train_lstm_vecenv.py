@@ -179,12 +179,12 @@ if __name__ == "__main__":
         ent_coef= ENT_START,          # no deduction constant scalar
         
         policy_kwargs=dict(
-            lstm_hidden_size=128,          # size of recurrent state
+            lstm_hidden_size=64,          # size of recurrent state
             n_lstm_layers=1,               # stack more layers if needed
             shared_lstm=False,             # separate actor/critic LSTM towers
             enable_critic_lstm=False,       # keep critic recurrent
             activation_fn=torch.nn.ReLU,
-            net_arch=dict(pi=[256], vf=[256,256]) 
+            net_arch=dict(pi=[256,256], vf=[256,256]) 
             # lstm_kwargs={}               # extra nn.LSTM kwargs if needed
         ),
         tensorboard_log=SAVE_DIR,
