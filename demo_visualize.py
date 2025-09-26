@@ -1,4 +1,4 @@
-from ppoenv_guide import BipedEnv
+from ppo_demoenv import BipedEnv
 import os
 import numpy as np
 from stable_baselines3 import PPO
@@ -6,12 +6,12 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ppo_path = "ppo_newreward/PPO_39"
+ppo_path = "ppo_newreward/PPO_46"
 env = BipedEnv(demo_mode=True,render_mode="human")
-# ppo_file = "model_checkpoint_26ppo_256_256.zip"
+# ppo_file = "model_checkpoint_10ppo_256_256.zip"
 ppo_file = "final_model.zip"
 
-demo_type = "lstm"
+demo_type = "mlp"
 # ppo_path = "ppo_256_256/PPO_22"
 # env = BipedEnv(demo_mode=True,render_mode="human")
 # ppo_file = "model_checkpoint_20ppo_256_256.zip"
@@ -48,7 +48,7 @@ episode_len = 5
 total_rew = 0
 ground_noise = 0.0
 gamma = 0.5
-case_no = 10
+case_no = 1
 
 for current_no in range(case_no):
     
@@ -56,14 +56,14 @@ for current_no in range(case_no):
     past_lhip = []
     total_attempts += 1
     succes = True
-    test_speed = 0.5 + current_no*0.2
+    test_speed = 0.3
     test_angle = 0.0
 
     episode_start = True
     lstm_states = None
 
     dt = 1e-3 #default of pybullet
-    episode_len = 5
+    episode_len = 50
     max_steps = int(episode_len*(1/dt))
     if ground_noise > 0:
         heightfield_data = np.load(f"noise_planes/plane_{gamma}_0.npy")
@@ -84,18 +84,43 @@ for current_no in range(case_no):
     
     mean_reward = 0
     episode_steps = 0
+    prev_pos = 0
+    speed_change_interval = 500
+    avg_duration = 200
+    desired_speeds = []
+    actual_speeds = []
+    current_time = []
+    reverse = False
     for i in range(0, int(max_steps/10)):
+
         if demo_type == "lstm":
             action, lstm_states = model.predict(obs, state=lstm_states, episode_start=episode_start, deterministic=True)
             episode_start = False
         else:
             action, _states = model.predict(obs)
 
+        if i % speed_change_interval == 0:
+            env.change_ref_speed(test_speed)
+            if reverse == True:
+                test_speed = max(test_speed - 0.3, 0.2)
+                if test_speed == 0.2:
+                    reverse = False
+            else:
+                test_speed = min(test_speed + 0.3, 2.0)
+                if test_speed == 2.0:
+                    reverse = True
+
         obs, rewards, dones, truncated, info = env.step(action)
         past_rhip.append(obs[7])
         past_lhip.append(obs[10])
 
-        ext_state = env.return_external_state()            
+        if i % avg_duration == 0:
+            if i != 0:
+                desired_speeds.append(test_speed)
+                actual_speeds.append((env.return_external_state()[1]-prev_pos)/(avg_duration*0.01))
+                current_time.append(i*0.01)
+            prev_pos = env.return_external_state()[1]
+        ext_state = env.return_external_state()
         if dones:
             succes = False
             mean_speed = 0
@@ -104,6 +129,8 @@ for current_no in range(case_no):
             break
         mean_reward += rewards
         episode_steps += 1
+    print(f"Desired Speed: {test_speed}, Actual Speed: {(ext_state[1]-prev_pos)/avg_duration*0.01}")
+    print(f"Total Time taken: {time.time() - t0} seconds for {episode_steps} steps")
     mean_reward /= episode_steps
     total_rew += mean_reward
     print(f"Mean Reward: {mean_reward}")       
@@ -121,3 +148,12 @@ for current_no in range(case_no):
             succes = False
 total_rew /= case_no
 print(f"Total Reward: {total_rew}")
+plt.figure()
+plt.plot(current_time,desired_speeds,label='Desired Speeds')
+plt.plot(current_time,actual_speeds,label='Actual Speeds')
+plt.legend()
+plt.xlabel('Time (s)')
+plt.ylabel('Speed (m/s)')
+plt.title('Desired vs Actual Speeds')
+plt.savefig('speed_tracking.png')
+plt.show()

@@ -1,3 +1,5 @@
+256(NN)-256(NN), DECAY, FULL_STATE, FULL_REWARD 
+
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import (
     CheckpointCallback,

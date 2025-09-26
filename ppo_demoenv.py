@@ -4,34 +4,29 @@ import torch
 from gait_generator_net import SimpleFCNN
 import gymnasium as gym
 from gymnasium import spaces
-import pybullet as p
 import pybullet_data
 import time
 from PIL import Image
+import pybullet as pyb
 
 class BipedEnv(gym.Env):
     def __init__(self,render=False, render_mode= None, demo_mode=False, demo_type=None):
         self.step_counter = 0
+        self.p = pyb
         if render_mode == 'human':
-            self.physics_client = p.connect(p.GUI)
+            self.physics_client = self.p.connect(self.p.GUI)
         else:
-            self.physics_client = p.connect(p.DIRECT)
+            self.physics_client = self.p.connect(self.p.DIRECT)
         self.observe_mode = False
         self.scale = 1.
         self.dt = 1e-3
         self.demo_mode = demo_mode
         self.demo_type = demo_type
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        if self.demo_mode == True:
-            p.setPhysicsEngineParameter(
-                fixedTimeStep       = 1.0/1000.0,
-                numSolverIterations = 100,
-                deterministicOverlappingPairs = 1,
-                enableConeFriction  = 0
-            )           
-        
-        self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
-        self.planeId = p.loadURDF("plane.urdf",physicsClientId=self.physics_client)
+        self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+
+        self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,1.185], self.p.getQuaternionFromEuler([0.,0.,0.])
+        ,physicsClientId=self.physics_client)
+        self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client)
         self.leg_len = 0.94
         self.render_mode = render_mode
         self.joint_idx = [2,3,4,5,6,7,8]
@@ -45,7 +40,7 @@ class BipedEnv(gym.Env):
         self.gaitgen_net.load_state_dict(torch.load('final_model.pth',weights_only=True))
         
         self.normalizationconst = np.load(rf"newnormalization_constants.npy")
-        self.joint_no = p.getNumJoints(self.robot)
+        self.joint_no = self.p.getNumJoints(self.robot,physicsClientId=self.physics_client)
         self.max_torque = np.array([500,500,300,150,500,300,150])  # max torque for each joint defined in urdf file
         self.state = np.zeros(58)
         self.update_const = 0.75
@@ -58,12 +53,26 @@ class BipedEnv(gym.Env):
         self.left_swing = False
 
     def reset(self,seed=None,test_speed = None, test_angle = None,demo_max_steps = None, 
-              ground_noise = None, ground_resolution = None,heightfield_data=[None]):
+              ground_noise = None, ground_resolution = None,heightfield_data=[None],options= None):
         self.test_speed = test_speed
         self.test_angle = test_angle
         self.max_steps = int(3*(1/self.dt))
         self.t = 0
-        p.resetSimulation(physicsClientId=self.physics_client)
+        self.p.resetSimulation(physicsClientId=self.physics_client)
+        self.p.setGravity(0,0,-9.81)
+        self.p.setTimeStep(self.dt)
+        if self.demo_mode == True:
+            self.p.setPhysicsEngineParameter(
+                fixedTimeStep       = 1.0/1000.0,
+                numSolverIterations = 100,
+                deterministicOverlappingPairs = 1,
+                enableConeFriction  = 0,
+                physicsClientId=self.physics_client
+            )
+            self.p.setPhysicsEngineParameter(numSubSteps=0) # OR a fixed, high value
+            self.p.setPhysicsEngineParameter(enableFileCaching=0) # Prevents reading from disk, which can have timing issues
+
+
         speed_limit = 2.2 #np.clip(self.step_counter/3_500_000,0,1.9) + 0.7
         ramp_Limit = 5 #np.clip(self.step_counter/1_200_000,0,5)
 
@@ -87,19 +96,20 @@ class BipedEnv(gym.Env):
         self.reference = self.findgait(encoder_vec)                     #Find the gait
         self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)     #Clip the gait
 
-        plane_orientation = p.getQuaternionFromEuler([self.ramp_angle, 0 , 0])
+        plane_orientation = self.p.getQuaternionFromEuler([self.ramp_angle, 0 , 0],physicsClientId=self.physics_client)
 
         if self.demo_mode == False:
-            self.planeId = p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
-            p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+            self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
+            self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,physicsClientId=self.physics_client)
         else:
             if (ground_noise != None):
                 self.init_noisy_plane(ground_resolution=ground_resolution, noise_level=ground_noise,baseOrientation=plane_orientation,
                                       heightfield_data=heightfield_data)
                 self.heightfield_data = heightfield_data
             else:
-                self.planeId = p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
-                p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+                self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
+                self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,
+                frictionAnchor=1,physicsClientId=self.physics_client)
 
 
         self.reset_info = {'current state':self.state}
@@ -126,15 +136,15 @@ class BipedEnv(gym.Env):
         for i in range(10):
             self.current_action = self.update_const*self.target_action + (1-self.update_const)*self.current_action 
             self.t +=1
-            p.setJointMotorControlArray(
+            self.p.setJointMotorControlArray(
                 bodyIndex=self.robot,
                 jointIndices=self.joint_idx,
-                controlMode=p.TORQUE_CONTROL,
+                controlMode=self.p.TORQUE_CONTROL,
                 forces=self.current_action,
                 physicsClientId=self.physics_client
             )
             # Step simulation
-            p.stepSimulation()
+            self.p.stepSimulation(physicsClientId=self.physics_client)
             
         self.past_target_action = self.target_action
         self.past2_target_action = self.past_target_action
@@ -150,7 +160,7 @@ class BipedEnv(gym.Env):
         return self.state, reward, done, truncated, self.state_info
 
     def biped_reward(self,x,torques):
-        self.imitation_decay = 1 #np.exp(-self.init_no / 200000)  # Decay over 10M steps
+        self.imitation_decay = 0#np.exp(-self.step_counter / 60_000_000)  # Decay over 15M steps divided by 60M for lowest 0.779
         self.imitation_weight_hip_pos = 0.75
         self.imitation_weight_knee_pos = 0.75
         self.imitation_weight_ankle_pos = 0.25
@@ -159,27 +169,29 @@ class BipedEnv(gym.Env):
         self.imitation_weight_knee_vel = 0.15
         self.imitation_weight_ankle_vel = 0.1
 
+        total_imitation_coeff_decay = 2.15 - (2.15 * self.imitation_decay)
+        other_reward_coeff = (total_imitation_coeff_decay +1.7) / 1.7
         # 10 M steps is usually 35k episodes
-        self.alive_weight = 0.5
-        self.contact_weight = 0.6
+        self.alive_weight = 0.5 * other_reward_coeff
+        self.contact_weight = 0.6 * other_reward_coeff
         done = False
         reward = 0
 
         #Contact Reward
-        contact_points = p.getContactPoints(self.robot, self.planeId)
+        contact_points = self.p.getContactPoints(self.robot, self.planeId,physicsClientId=self.physics_client)
 
         # Left Contact Points
         left_contact_forces = [i[9] for i in contact_points if i[3] == 8]
         left_contact = len(left_contact_forces)
         left_contact_forces = np.mean(left_contact_forces) if len(left_contact_forces) > 0 else 0
-        lfoot_state = p.getLinkState(self.robot, 8,computeLinkVelocity=True)        #link index 8 is for left foot
+        lfoot_state = self.p.getLinkState(self.robot, 8,computeLinkVelocity=True,physicsClientId=self.physics_client)        #link index 8 is for left foot
         lfoot_pos = lfoot_state[0]
 
         # Right Contact Points
         right_contact_forces = [i[9] for i in contact_points if i[3] == 5]
         right_contact = len(right_contact_forces)
         right_contact_forces = np.mean(right_contact_forces) if len(right_contact_forces) > 0 else 0
-        rfoot_state = p.getLinkState(self.robot, 5,computeLinkVelocity=True)        #link index 5 is for right foot
+        rfoot_state = self.p.getLinkState(self.robot, 5,computeLinkVelocity=True,physicsClientId=self.physics_client)        #link index 5 is for right foot
         rfoot_pos = rfoot_state[0]
 
         reward  += self.contact_weight * self.calculate_contact_reward(left_contact, right_contact, left_contact_forces, 
@@ -215,7 +227,7 @@ class BipedEnv(gym.Env):
         
         # Forward Speed Reward
         current_speed = (self.external_states[1] - self.past_forward_place) / (self.dt * 10)  # forward speed
-        reward += 0.6*(1/self.imitation_decay) * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
+        reward += 0.6* other_reward_coeff * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
 
         #Angle Reward
         if np.abs(self.external_states[3]) > 0.98:  # Robot outside healthy angle range
@@ -296,7 +308,7 @@ class BipedEnv(gym.Env):
             return 0
         
     def close(self):
-        p.disconnect()
+        self.p.disconnect(physicsClientId=self.physics_client)
         print("Environment closed")
 
 
@@ -384,15 +396,15 @@ class BipedEnv(gym.Env):
 
             init_z = self.starting_height(hip_init,knee_init,ankle_init)
             del self.robot
-            self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,init_z + 0.02], p.getQuaternionFromEuler([0.,0.,0.]))
-            p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0])
+            self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,init_z + 0.02], self.p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
+            self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0],physicsClientId=self.physics_client)
 
-            p.resetJointState(self.robot, 3, targetValue = rhip_pos) 
-            p.resetJointState(self.robot, 4, targetValue = rknee_pos)
-            p.resetJointState(self.robot, 5, targetValue = rankle_pos)
-            p.resetJointState(self.robot, 6, targetValue = lhip_pos)
-            p.resetJointState(self.robot, 7, targetValue = lknee_pos)
-            p.resetJointState(self.robot, 8, targetValue = lankle_pos)
+            self.p.resetJointState(self.robot, 3, targetValue = rhip_pos,physicsClientId=self.physics_client) 
+            self.p.resetJointState(self.robot, 4, targetValue = rknee_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 5, targetValue = rankle_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 6, targetValue = lhip_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 7, targetValue = lknee_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 8, targetValue = lankle_pos,physicsClientId=self.physics_client)
         else:
             start_idx = 0
             self.reference_idx = start_idx
@@ -407,51 +419,51 @@ class BipedEnv(gym.Env):
 
             init_z = self.starting_height(rhip_pos,lhip_pos,rankle_pos)
             del self.robot
-            self.robot = p.loadURDF("assets/biped2d.urdf", [0,0,1.185], p.getQuaternionFromEuler([0.,0.,0.]))
-            p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0])
+            self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,1.185], self.p.getQuaternionFromEuler([0.,0.,0.]))
+            self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0],physicsClientId=self.physics_client)
 
-            p.resetJointState(self.robot, 3, targetValue = rhip_pos) 
-            p.resetJointState(self.robot, 4, targetValue = rknee_pos)
-            p.resetJointState(self.robot, 5, targetValue = rankle_pos)
-            p.resetJointState(self.robot, 6, targetValue = lhip_pos)
-            p.resetJointState(self.robot, 7, targetValue = lknee_pos)
-            p.resetJointState(self.robot, 8, targetValue = lankle_pos)
+            self.p.resetJointState(self.robot, 3, targetValue = rhip_pos,physicsClientId=self.physics_client) 
+            self.p.resetJointState(self.robot, 4, targetValue = rknee_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 5, targetValue = rankle_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 6, targetValue = lhip_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 7, targetValue = lknee_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 8, targetValue = lankle_pos,physicsClientId=self.physics_client)
 
-        p.setGravity(0,0,-9.81)
-        p.setTimeStep(self.dt)
+        self.p.setGravity(0,0,-9.81,physicsClientId=self.physics_client)
+        self.p.setTimeStep(self.dt,physicsClientId=self.physics_client)
 
-        self.t1_torso_pos = p.getJointState(self.robot, 2)[0]
-        self.t1_rhip_pos = p.getJointState(self.robot, 3)[0]
-        self.t1_rknee_pos = p.getJointState(self.robot, 4)[0]
-        self.t1_rankle_pos = p.getJointState(self.robot, 5)[0]
-        self.t1_lhip_pos = p.getJointState(self.robot, 6)[0]
-        self.t1_lknee_pos = p.getJointState(self.robot, 7)[0]
-        self.t1_lankle_pos = p.getJointState(self.robot, 8)[0]
+        self.t1_torso_pos = self.p.getJointState(self.robot, 2,physicsClientId=self.physics_client)[0]
+        self.t1_rhip_pos = self.p.getJointState(self.robot, 3,physicsClientId=self.physics_client)[0]
+        self.t1_rknee_pos = self.p.getJointState(self.robot, 4,physicsClientId=self.physics_client)[0]
+        self.t1_rankle_pos = self.p.getJointState(self.robot, 5,physicsClientId=self.physics_client)[0]
+        self.t1_lhip_pos = self.p.getJointState(self.robot, 6,physicsClientId=self.physics_client)[0]
+        self.t1_lknee_pos = self.p.getJointState(self.robot, 7,physicsClientId=self.physics_client)[0]
+        self.t1_lankle_pos = self.p.getJointState(self.robot, 8,physicsClientId=self.physics_client)[0]
 
 
     def return_state(self):
         
-        link_state = p.getLinkState(self.robot, 2,computeLinkVelocity=True)          #link index 2 is for torso
+        link_state = self.p.getLinkState(self.robot, 2,computeLinkVelocity=True,physicsClientId=self.physics_client)          #link index 2 is for torso
         torso_g_quat = link_state[1]
-        roll, _, _ = p.getEulerFromQuaternion(torso_g_quat)
+        roll, _, _ = self.p.getEulerFromQuaternion(torso_g_quat,physicsClientId=self.physics_client)
         (pos_x,pos_y,pos_z) = link_state[0]                #3D position of the link
         y_vel = link_state[6][1]                           #y velocity of the link
 
-        self.torso_pos = p.getJointState(self.robot, 2)[0]
-        self.rhip_pos = p.getJointState(self.robot, 3)[0]
-        self.rknee_pos = p.getJointState(self.robot, 4)[0]
-        self.rankle_pos = p.getJointState(self.robot, 5)[0]
-        self.lhip_pos = p.getJointState(self.robot, 6)[0]
-        self.lknee_pos = p.getJointState(self.robot, 7)[0]
-        self.lankle_pos = p.getJointState(self.robot, 8)[0]
+        self.torso_pos = self.p.getJointState(self.robot, 2,physicsClientId=self.physics_client)[0]
+        self.rhip_pos = self.p.getJointState(self.robot, 3,physicsClientId=self.physics_client)[0]
+        self.rknee_pos = self.p.getJointState(self.robot, 4,physicsClientId=self.physics_client)[0]
+        self.rankle_pos = self.p.getJointState(self.robot, 5,physicsClientId=self.physics_client)[0]
+        self.lhip_pos = self.p.getJointState(self.robot, 6,physicsClientId=self.physics_client)[0]
+        self.lknee_pos = self.p.getJointState(self.robot, 7,physicsClientId=self.physics_client)[0]
+        self.lankle_pos = self.p.getJointState(self.robot, 8,physicsClientId=self.physics_client)[0]
 
-        self.torso_vel = p.getJointState(self.robot, 2)[1]
-        self.rhip_vel = p.getJointState(self.robot, 3)[1]
-        self.rknee_vel = p.getJointState(self.robot, 4)[1]
-        self.rankle_vel = p.getJointState(self.robot, 5)[1]
-        self.lhip_vel = p.getJointState(self.robot, 6)[1]
-        self.lknee_vel = p.getJointState(self.robot, 7)[1]
-        self.lankle_vel = p.getJointState(self.robot, 8)[1]
+        self.torso_vel = self.p.getJointState(self.robot, 2,physicsClientId=self.physics_client)[1]
+        self.rhip_vel = self.p.getJointState(self.robot, 3,physicsClientId=self.physics_client)[1]
+        self.rknee_vel = self.p.getJointState(self.robot, 4,physicsClientId=self.physics_client)[1]
+        self.rankle_vel = self.p.getJointState(self.robot, 5,physicsClientId=self.physics_client)[1]
+        self.lhip_vel = self.p.getJointState(self.robot, 6,physicsClientId=self.physics_client)[1]
+        self.lknee_vel = self.p.getJointState(self.robot, 7,physicsClientId=self.physics_client)[1]
+        self.lankle_vel = self.p.getJointState(self.robot, 8,physicsClientId=self.physics_client)[1]
 
         ref_rhip_vel = (self.reference[self.reference_idx+self.t,0] - self.reference[self.reference_idx+self.t-1,0])/self.dt
         ref_rknee_vel = (self.reference[self.reference_idx+self.t,1] - self.reference[self.reference_idx+self.t-1,1])/self.dt
@@ -547,11 +559,11 @@ class BipedEnv(gym.Env):
         # Use identity quaternion if none provided.
         mesh_scale=[ground_resolution, ground_resolution, 1]
         if baseOrientation is None:
-            baseOrientation = p.getQuaternionFromEuler([0, 0, 0])
+            baseOrientation = self.p.getQuaternionFromEuler([0, 0, 0],physicsClientId=self.physics_client)
 
         # Create a collision shape for the heightfield
-        terrain_shape = p.createCollisionShape(
-            shapeType=p.GEOM_HEIGHTFIELD,
+        terrain_shape = self.p.createCollisionShape(
+            shapeType=self.p.GEOM_HEIGHTFIELD,
             meshScale=mesh_scale,
             heightfieldData=heightfield_data,
             numHeightfieldRows=num_rows,
@@ -562,7 +574,7 @@ class BipedEnv(gym.Env):
         max_height = np.max(heightfield_data)
         z_center = 0.5 * (min_height + max_height) * mesh_scale[2]
         # Create a static (mass=0) multi-body using the heightfield shape
-        self.planeId = p.createMultiBody(
+        self.planeId = self.p.createMultiBody(
             baseMass=0,
             baseCollisionShapeIndex=terrain_shape,
             basePosition=[0, 0, z_center],
@@ -570,17 +582,19 @@ class BipedEnv(gym.Env):
             physicsClientId=self.physics_client
         )
 
-        p.changeDynamics(self.planeId, -1, lateralFriction=1.0)
+        self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,
+                              frictionAnchor=1, physicsClientId=self.physics_client)
 
     def get_image(self):
-        view_matrix = p.computeViewMatrix(
+        view_matrix = self.p.computeViewMatrix(
             cameraEyePosition=[3, 0, 1.5],  # farther and higher
             cameraTargetPosition=[0, 0, 1.0],
             cameraUpVector=[0, 0, 1]
+            
         )
 
         # Use square aspect and wide FOV
-        projection_matrix = p.computeProjectionMatrixFOV(
+        projection_matrix = self.p.computeProjectionMatrixFOV(
             fov=75,               # wider field of view
             aspect=1.0,           # square image
             nearVal=0.1,
@@ -589,7 +603,7 @@ class BipedEnv(gym.Env):
 
         # Capture square image
         res = 640
-        _, _, rgbImg, _, _ = p.getCameraImage(
+        _, _, rgbImg, _, _ = self.p.getCameraImage(
             width=res,
             height=res,
             viewMatrix=view_matrix,
@@ -600,3 +614,24 @@ class BipedEnv(gym.Env):
         rgb_array = np.reshape(rgbImg, (res, res, 4))
         image = Image.fromarray(rgb_array[:, :, :3], 'RGB')
         return image
+
+    def change_ref_speed(self,new_speed):
+
+        encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
+        encoder_vec[0] = new_speed/3
+        encoder_vec[1] = self.leg_len /1.5
+        encoder_vec[2] = self.leg_len /1.5
+        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
+        newly_reference = self.findgait(encoder_vec)                     #Find the gait
+        newly_reference = np.clip(newly_reference, -np.pi/2, np.pi/2)     #Clip the gait
+        current_ref_pos = np.array([self.reference[self.reference_idx+self.t,0], self.reference[self.reference_idx+self.t,1], 
+                             self.reference[self.reference_idx+self.t,3],self.reference[self.reference_idx+self.t,4]])
+        
+        # find the closest point in the new reference to the current position
+        ref_pos = np.array([newly_reference[:,0], newly_reference[:,1], 
+                             newly_reference[:,3],newly_reference[:,4]]).T
+        distances = np.linalg.norm(ref_pos - current_ref_pos, axis=1)
+        closest_index = np.argmin(distances) 
+        self.t = closest_index
+        self.reference = newly_reference
+        self.reference_speed = new_speed

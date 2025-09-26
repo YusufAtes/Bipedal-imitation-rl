@@ -1,3 +1,6 @@
+256(NN)-256(NN), NEW_DECAY_60M, FULL_STATE, FULL_REWARD, RSI
+
+
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import (
     CheckpointCallback,
@@ -183,6 +186,8 @@ if __name__ == "__main__":
     print(f"Total training time: {time.time() - t0:.2f} seconds")       
 
 
+
+
 import numpy as np
 from scipy.signal import resample
 import torch
@@ -208,14 +213,7 @@ class BipedEnv(gym.Env):
         self.demo_mode = demo_mode
         self.demo_type = demo_type
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        if self.demo_mode == True:
-            self.p.setPhysicsEngineParameter(
-                fixedTimeStep       = 1.0/1000.0,
-                numSolverIterations = 100,
-                deterministicOverlappingPairs = 1,
-                enableConeFriction  = 0,
-                physicsClientId=self.physics_client
-            )
+
         self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,1.185], self.p.getQuaternionFromEuler([0.,0.,0.])
         ,physicsClientId=self.physics_client)
         self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client)
@@ -251,6 +249,20 @@ class BipedEnv(gym.Env):
         self.max_steps = int(3*(1/self.dt))
         self.t = 0
         self.p.resetSimulation(physicsClientId=self.physics_client)
+        self.p.setGravity(0,0,-9.81)
+        self.p.setTimeStep(self.dt)
+        if self.demo_mode == True:
+            self.p.setPhysicsEngineParameter(
+                fixedTimeStep       = 1.0/1000.0,
+                numSolverIterations = 100,
+                deterministicOverlappingPairs = 1,
+                enableConeFriction  = 0,
+                physicsClientId=self.physics_client
+            )
+            self.p.setPhysicsEngineParameter(numSubSteps=0) # OR a fixed, high value
+            self.p.setPhysicsEngineParameter(enableFileCaching=0) # Prevents reading from disk, which can have timing issues
+
+
         speed_limit = 2.2 #np.clip(self.step_counter/3_500_000,0,1.9) + 0.7
         ramp_Limit = 5 #np.clip(self.step_counter/1_200_000,0,5)
 
@@ -286,7 +298,8 @@ class BipedEnv(gym.Env):
                 self.heightfield_data = heightfield_data
             else:
                 self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
-                self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,physicsClientId=self.physics_client)
+                self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,
+                frictionAnchor=1,physicsClientId=self.physics_client)
 
 
         self.reset_info = {'current state':self.state}
@@ -337,7 +350,7 @@ class BipedEnv(gym.Env):
         return self.state, reward, done, truncated, self.state_info
 
     def biped_reward(self,x,torques):
-        self.imitation_decay = np.exp(-self.step_counter / 20_000_000)  # Decay over 20M steps
+        self.imitation_decay = np.exp(-self.step_counter / 60_000_000)  # Decay over 15M steps divided by 60M for lowest 0.779
         self.imitation_weight_hip_pos = 0.75
         self.imitation_weight_knee_pos = 0.75
         self.imitation_weight_ankle_pos = 0.25
@@ -346,9 +359,11 @@ class BipedEnv(gym.Env):
         self.imitation_weight_knee_vel = 0.15
         self.imitation_weight_ankle_vel = 0.1
 
+        total_imitation_coeff_decay = 2.15 - (2.15 * self.imitation_decay)
+        other_reward_coeff = (total_imitation_coeff_decay +1.7) / 1.7
         # 10 M steps is usually 35k episodes
-        self.alive_weight = 0.5
-        self.contact_weight = 0.6
+        self.alive_weight = 0.5 * other_reward_coeff
+        self.contact_weight = 0.6 * other_reward_coeff
         done = False
         reward = 0
 
@@ -402,7 +417,7 @@ class BipedEnv(gym.Env):
         
         # Forward Speed Reward
         current_speed = (self.external_states[1] - self.past_forward_place) / (self.dt * 10)  # forward speed
-        reward += 0.6*(1/self.imitation_decay) * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
+        reward += 0.6* other_reward_coeff * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
 
         #Angle Reward
         if np.abs(self.external_states[3]) > 0.98:  # Robot outside healthy angle range
@@ -738,7 +753,7 @@ class BipedEnv(gym.Env):
 
         # Create a collision shape for the heightfield
         terrain_shape = self.p.createCollisionShape(
-            shapeType=p.GEOM_HEIGHTFIELD,
+            shapeType=self.p.GEOM_HEIGHTFIELD,
             meshScale=mesh_scale,
             heightfieldData=heightfield_data,
             numHeightfieldRows=num_rows,
@@ -757,7 +772,8 @@ class BipedEnv(gym.Env):
             physicsClientId=self.physics_client
         )
 
-        self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,physicsClientId=self.physics_client)
+        self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,
+                              frictionAnchor=1, physicsClientId=self.physics_client)
 
     def get_image(self):
         view_matrix = self.p.computeViewMatrix(

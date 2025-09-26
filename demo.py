@@ -1,3 +1,4 @@
+import imageio
 from ppoenv_guide import BipedEnv
 import time
 import os
@@ -8,6 +9,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # Needed for 3D plotting
 import plot_utils
+from utils import set_global_seed
+from scipy.signal import butter, filtfilt
 
 #INSTEAD OF SUCCES RATE ADD HOW MANY METERS IT TRAVELED
 def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
@@ -301,8 +304,12 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                     total_travel_dist = ext_state[1]
                     mean_speed = total_travel_dist / episode_len
                     avg_mean_speeds += mean_speed
-
-            actual_speeds[speed_no] = avg_mean_speeds / (trial_no - failed_attempts)
+            if failed_attempts < trial_no:
+                actual_speeds[speed_no] = avg_mean_speeds / (trial_no - failed_attempts)
+            else:
+                speed_range = speed_range[0:speed_no]
+                actual_speeds = actual_speeds[0:speed_no]
+                break
 
             record_data = pd.concat([record_data, pd.DataFrame([{"demo type": demo_type, "cmd speed": desired_speed, "angle": None,
                 "mean speed": actual_speeds[speed_no],"noise level": None,
@@ -312,6 +319,9 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         # plot the results of the demo make the x axis the speed and the y axis the angle and the color the distance and make the failures red
         plt.figure(figsize=(8, 6))
         plt.plot(speed_range, actual_speeds)
+        plt.plot(speed_range, speed_range, '--', color='gray')  # Reference line y=x
+        plt.title('Commanded Speed vs Actual Speed')
+        plt.legend(['Actual Speed', 'Commanded Speed (y=x)'], loc='upper left')
         plt.xlabel("Commanded Speed (m/s)")
         plt.ylabel('Actual Speed (m/s)')
         plt.savefig(os.path.join(ppo_path, f"demo_vel_diff.png"))
@@ -450,8 +460,6 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         
         plt.savefig(os.path.join(ppo_path, "demo_avg_speeds.png"), bbox_inches="tight")
         plt.close()
-
-
         # # Success Plot
         S, A = np.meshgrid(speeds, angles)
         x = S.ravel()
@@ -494,6 +502,85 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         plt.savefig(os.path.join(ppo_path, "demo_avg_success.png"), bbox_inches="tight")
         plt.close()
 
+    elif demo_type == "track":
+
+        episode_len = 80 # seconds total of 8000 steps
+
+        t0 = time.time()
+        env = BipedEnv(demo_mode=True, demo_type=demo_type, render_mode= None)
+        model = PPO.load(os.path.join(ppo_path,ppo_file),device='cpu',deterministic=True)
+        model.set_env(env) 
+        speed_range_forward = np.linspace(0.1, 2.1, episode_len)
+        speed_range_backward = speed_range_forward[::-1]
+        speed_range = np.concatenate((speed_range_forward, speed_range_backward), axis=0)
+        actual_speeds = np.zeros((len(speed_range)))
+
+        desired_speed = speed_range[0]
+        angle = 0.0
+
+        total_rew = 0
+        success = True
+
+        dt = 1e-3 #default of pybullet
+        total_rew = 0
+        desired_speeds = []
+        actual_speeds = []
+        current_time = []
+        frames = []
+        change_interval = episode_len * 100 / len(speed_range)  # Change speed every 5 seconds
+        max_steps = int(episode_len*(1/dt))
+        obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
+        terminated = False
+
+        episode_start = True
+        lstm_states = None
+        previous_place = 0.0
+        for i in range(0, int(max_steps/10)):
+            if ppo_type == "lstm":
+                action, lstm_states = model.predict(obs, state=lstm_states, episode_start=episode_start)
+                episode_start = False
+            else:
+                action, _states = model.predict(obs)
+            obs, rewards, dones, truncated, info = env.step(action)
+
+            if i % change_interval == 0:
+                print(i/change_interval)
+                if i != 0:
+                    desired_speeds.append(desired_speed)
+                    actual_speeds.append((env.return_external_state()[1]-previous_place)/(change_interval*0.01))
+                    current_time.append(i*0.01)
+
+                if i == 0:
+                    desired_speeds.append(0.0)
+                    actual_speeds.append(0.0)
+                    current_time.append(0.0)
+
+                previous_place = env.return_external_state()[1]
+                desired_speed = speed_range[int(i/change_interval)]
+                env.change_ref_speed(desired_speed)
+
+            if i % 10 == 0:
+                speed_text = f"Desired Speed: {desired_speed:.2f} m/s"
+                img = env.get_follow_camera_image(overlay_text=speed_text)
+                frames.append(np.array(img))
+            total_rew += rewards            
+            ext_state = env.return_external_state()
+
+            if dones:
+                print("Fallen!")
+                break
+
+        plt.figure(figsize=(8, 6))
+        plt.plot(current_time, desired_speeds, label='Desired Speed')
+        plt.plot(current_time, actual_speeds, label='Actual Speed')
+        plt.title('Desired vs Actual Speed over Time')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Speed (m/s)')
+        plt.legend()
+        plt.grid()
+        plt.savefig(os.path.join(ppo_path, f"demo_velocity_track.png"))
+        plt.close()
+        imageio.mimsave("biped_follow.mp4", frames, fps=30)
     record_data.to_csv(os.path.join(ppo_path, f"demo_data_{demo_type}_{ppo_type}_{scenario_mode}.csv"), index=False)
 
     env.close()
@@ -507,12 +594,12 @@ if __name__ == "__main__":
     ppo_type = "mlp"                # "lstm" or "mlp"
     demo_type = "vel_diff"          # "rotation" or "noisy"
 
-    ppo_path = "ppo_newreward/PPO_40"
+    ppo_path = "ppo_newreward/PPO_39"
     ppo_file = "final_model.zip"
 
     scenario_mode = 0
     speed_len = 21
-    angle_len = 55
+    angle_len = 31
 
     episode_len = 4 # seconds
     fail_threshold = 1
@@ -521,43 +608,52 @@ if __name__ == "__main__":
     floor_length = 9.999  # meters
     t0 = time.time()
 
-    # # ----------------------------     END PARAMS     ----------------------------
+    # # # ----------------------------     END PARAMS     ----------------------------
 
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
-    print("Vel diff demo done, starting rotation demo now...")
-    print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
+    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+    #             demo_type=demo_type,ppo_type=ppo_type)
+    # print("Vel diff demo done, starting rotation demo now...")
+    # print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
 
-    t0 = time.time()
-    demo_type = "rotation"
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
+    # t0 = time.time()
+    # demo_type = "rotation"
+    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+    #             demo_type=demo_type,ppo_type=ppo_type)
     
-    print("Rotation demo done, starting noisy demo now...")
-    print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
+    # print("Rotation demo done, starting noisy demo now...")
+    # print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
+
+    # t0 = time.time()
+    # demo_type = "noisy"
+
+    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+    #             demo_type=demo_type,ppo_type=ppo_type)
+    # print(f"Noisy demo {scenario_mode} done!")
+    # print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+
+
+    # t0 = time.time()
+    # scenario_mode = 1
+    # demo_type = "noisy"
+
+    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+    #             demo_type=demo_type,ppo_type=ppo_type)
+    # print(f"Noisy demo {scenario_mode} done!")
+    # print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
 
     t0 = time.time()
-    demo_type = "noisy"
-
+    demo_type = "track"
     made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
                 avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
                 floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
                 demo_type=demo_type,ppo_type=ppo_type)
-    print(f"Noisy demo {scenario_mode} done!")
-    print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
-
-
-    t0 = time.time()
-    scenario_mode = 1
-    demo_type = "noisy"
-
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
-    print(f"Noisy demo {scenario_mode} done!")
-    print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+    print("Track demo done!")
+    print("Time taken for track demo: {:.2f} seconds".format(time.time() - t0))
