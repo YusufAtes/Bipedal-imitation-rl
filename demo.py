@@ -22,7 +22,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
     angles = np.linspace(-15, 15, angle_len)
 
     noise_levels = np.arange(1,20,1)
-    gammas = [0.5, 1.0, 1.5, 2.0]  # Different resolutions for the ground
+    gammas = [0.25, 0.5, 1.0, 1.5, 2.0]  # Different resolutions for the ground
     record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
                                         "resolution","success","max range","trial_no"])
     if demo_type == "noisy":
@@ -35,6 +35,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
             exp_speeds = np.zeros((speed_len,len(noise_levels)))
             exp_ranges = np.zeros((speed_len,len(noise_levels)))
             exp_success = np.zeros((speed_len,len(noise_levels)))
+            exp_steps = np.zeros((speed_len,len(noise_levels)))
             total_experiences = 0
 
             for noise_level in noise_levels:
@@ -122,17 +123,21 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                         exp_speeds[speed_no, noise_level-1] += avg_mean_speeds
                         exp_success[speed_no, noise_level-1] += avg_success
                         exp_ranges[speed_no, noise_level-1] += max_range
+                        exp_steps[speed_no, noise_level-1] += env.return_step_taken()
                         # Record data
                         record_data = pd.concat([record_data, pd.DataFrame([{"demo type": demo_type, "cmd speed": desired_speed, "angle": angle,
                                             "mean speed": avg_mean_speeds,"noise level": noise_level,
                                             "resolution": gamma,"success": avg_success,"max range": max_range,
-                                            "trial_no": None}])], ignore_index=True)
+                                            "trial_no": None,"steps taken": env.return_step_taken()}])], ignore_index=True)
             exp_speeds = exp_speeds.T
             exp_success = exp_success.T
             exp_ranges = exp_ranges.T
+            exp_steps = exp_steps.T
 
             exp_speeds /= scenario_count
             exp_success /= scenario_count
+            exp_ranges /= scenario_count
+            exp_steps /= scenario_count
 
             ### Speed Plot      --------------------------------------------------------
             S, A = np.meshgrid(speeds, noise_levels)
@@ -254,6 +259,46 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
             plt.savefig(os.path.join(ppo_path, f"demo_avg_range_{scenario_mode}_{gamma}.png"), bbox_inches="tight")
             plt.close()
 
+            ### Steps Taken Plot      --------------------------------------------------------
+            S, A = np.meshgrid(speeds, noise_levels)
+            x = S.ravel()
+            y = A.ravel()
+            cvals = exp_steps.ravel()
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            # --- key part: compute a marker size that fills each (speed, angle) cell ---
+            uniq_x = np.unique(x)
+            uniq_y = np.unique(y)
+            dx = np.diff(uniq_x).min()
+            dy = np.diff(uniq_y).min()
+
+            # convert cell size in data units -> points^2 for scatter 's'
+            (x0, y0) = ax.transData.transform((0, 0))
+            (x1, y1) = ax.transData.transform((dx, dy))
+            cell_px = min(abs(x1 - x0), abs(y1 - y0))           # pixel size of the smaller step
+            cell_pt = cell_px * 72.0 / fig.dpi                  # pixels -> points
+            marker_area = (cell_pt * 0.98) ** 2                 # 98% of cell, fill with slight overlap
+
+            sc = ax.scatter(
+                x, y,
+                c=cvals,
+                cmap='Oranges',
+                marker='s',             # squares tile the grid
+                s=marker_area,          # fills each cell
+                linewidths=0,
+                edgecolors='none'
+            )
+
+            # colorbar + labels
+            speed_cbar = plt.colorbar(sc, ax=ax)
+            speed_cbar.set_label('Steps Taken')
+            ax.set_xlabel('Speed Value')
+            ax.set_ylabel('Noise Level')
+            ax.set_title('Steps Taken Plot')
+
+            plt.savefig(os.path.join(ppo_path, f"demo_avg_steps_{scenario_mode}_{gamma}.png"), bbox_inches="tight")
+            plt.close()
+
     elif demo_type == "vel_diff":
         t0 = time.time()
         env = BipedEnv(demo_mode=True, demo_type=demo_type, render_mode= None)
@@ -314,7 +359,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
             record_data = pd.concat([record_data, pd.DataFrame([{"demo type": demo_type, "cmd speed": desired_speed, "angle": None,
                 "mean speed": actual_speeds[speed_no],"noise level": None,
                 "resolution": None,"success": success,"max range": None,
-                "trial_no": None}])], ignore_index=True)
+                "trial_no": None,"steps taken": env.return_step_taken()}])], ignore_index=True)
             
         # plot the results of the demo make the x axis the speed and the y axis the angle and the color the distance and make the failures red
         plt.figure(figsize=(8, 6))
@@ -336,6 +381,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
 
         exp_speeds = np.zeros((speed_len, angle_len))
         exp_success = np.zeros((speed_len, angle_len))
+        exp_steps = np.zeros((speed_len, angle_len))
         total_experiences = 0
         total_exp_no = speed_len * angle_len * avg_trial_no * scenario_count
 
@@ -409,17 +455,22 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
 
                     exp_speeds[speed_no, angle_no] += avg_mean_speeds
                     exp_success[speed_no, angle_no] += avg_success
+                    exp_steps[speed_no, angle_no] += env.return_step_taken()
 
                     record_data = pd.concat([record_data, pd.DataFrame([{"demo type": demo_type, "cmd speed": desired_speed, "angle": angle,
                         "mean speed": avg_mean_speeds,"noise level": None,
                         "resolution": None,"success": avg_success,"max range": None,
-                        "trial_no": None}])], ignore_index=True)
+                        "trial_no": None,"steps taken": env.return_step_taken()}])], ignore_index=True)
 
         exp_speeds = exp_speeds.T
         exp_success = exp_success.T
+        exp_steps = exp_steps.T
+
         exp_speeds /= scenario_count
         exp_success /= scenario_count
+        exp_steps /= scenario_count
 
+        ## Speed Plot
         S, A = np.meshgrid(speeds, angles)
         x = S.ravel()
         y = A.ravel()
@@ -460,6 +511,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         
         plt.savefig(os.path.join(ppo_path, "demo_avg_speeds.png"), bbox_inches="tight")
         plt.close()
+
         # # Success Plot
         S, A = np.meshgrid(speeds, angles)
         x = S.ravel()
@@ -500,6 +552,48 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         ax.set_title('Avg Success Plot')
 
         plt.savefig(os.path.join(ppo_path, "demo_avg_success.png"), bbox_inches="tight")
+        plt.close()
+
+        ## Steps Taken Plot
+        S, A = np.meshgrid(speeds, angles)
+        x = S.ravel()
+        y = A.ravel()
+        cvals = exp_steps.ravel()
+
+        # figure/axes
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        # --- key part: compute a marker size that fills each (speed, angle) cell ---
+        uniq_x = np.unique(x)
+        uniq_y = np.unique(y)
+        dx = np.diff(uniq_x).min()
+        dy = np.diff(uniq_y).min()
+
+        # convert cell size in data units -> points^2 for scatter 's'
+        (x0, y0) = ax.transData.transform((0, 0))
+        (x1, y1) = ax.transData.transform((dx, dy))
+        cell_px = min(abs(x1 - x0), abs(y1 - y0))           # pixel size of the smaller step
+        cell_pt = cell_px * 72.0 / fig.dpi                  # pixels -> points
+        marker_area = (cell_pt * 0.98) ** 2                 # 98% of cell, fill with slight overlap
+
+        sc = ax.scatter(
+            x, y,
+            c=cvals,
+            cmap='Blues',
+            marker='s',             # squares tile the grid
+            s=marker_area,          # fills each cell
+            linewidths=0,
+            edgecolors='none'
+        )
+
+        # colorbar + labels
+        speed_cbar = plt.colorbar(sc, ax=ax)
+        speed_cbar.set_label('Steps Taken')
+        ax.set_xlabel('Speed Value')
+        ax.set_ylabel('Ramp Angle')
+        ax.set_title('Avg Steps Taken Plot')
+
+        plt.savefig(os.path.join(ppo_path, "demo_avg_steps_rotation.png"), bbox_inches="tight")
         plt.close()
 
     elif demo_type == "track":
@@ -627,27 +721,27 @@ if __name__ == "__main__":
     # print("Rotation demo done, starting noisy demo now...")
     # print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
 
-    # t0 = time.time()
-    # demo_type = "noisy"
+    t0 = time.time()
+    demo_type = "noisy"
 
-    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-    #             demo_type=demo_type,ppo_type=ppo_type)
-    # print(f"Noisy demo {scenario_mode} done!")
-    # print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+                demo_type=demo_type,ppo_type=ppo_type)
+    print(f"Noisy demo {scenario_mode} done!")
+    print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
 
 
-    # t0 = time.time()
-    # scenario_mode = 1
-    # demo_type = "noisy"
+    t0 = time.time()
+    scenario_mode = 1
+    demo_type = "noisy"
 
-    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-    #             demo_type=demo_type,ppo_type=ppo_type)
-    # print(f"Noisy demo {scenario_mode} done!")
-    # print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+                demo_type=demo_type,ppo_type=ppo_type)
+    print(f"Noisy demo {scenario_mode} done!")
+    print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
 
     t0 = time.time()
     demo_type = "track"

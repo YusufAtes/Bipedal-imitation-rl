@@ -6,10 +6,11 @@ total_runs = len(tv_list)
 # How many runs you want
 first_run = True
 i = 0
-for tv in tv_list:
+for tv in range(1):
+    tv = 1.715
     i += 1
     lm = "walk"
-    lp = "/home/baran/Bipedal-imitation-rl/locomotion-master(1)/locomotion-master/settings/cma_config_0.10.yml"
+    lp = "/home/baran/Bipedal-imitation-rl/locomotion-master(1)/locomotion-master/settings/cma_config_1.76.yml"
 
     if first_run:
         first_run = False

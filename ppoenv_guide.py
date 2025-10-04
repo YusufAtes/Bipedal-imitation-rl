@@ -62,7 +62,7 @@ class BipedEnv(gym.Env):
         self.p.resetSimulation(physicsClientId=self.physics_client)
         self.p.setGravity(0,0,-9.81)
         self.p.setTimeStep(self.dt)
-        self.step_taken_counter = 0
+        self.taken_step_counter = 0
         if self.demo_mode == True:
             self.p.setPhysicsEngineParameter(
                 fixedTimeStep       = 1.0/1000.0,
@@ -273,16 +273,22 @@ class BipedEnv(gym.Env):
                                   right_contact_forces, lfoot_pos, rfoot_pos, force_eps=10):
         
         if left_contact_forces > force_eps and right_contact_forces > force_eps:
+            if self.double_support == False:
+                self.taken_step_counter += 1
             self.double_support = True
             self.right_swing = False
             self.left_swing = False
 
         elif left_contact_forces > force_eps and right_contact_forces <= force_eps:
+            if self.right_swing == False:
+                self.taken_step_counter += 1
             self.double_support = False
             self.right_swing = True
             self.left_swing = False
 
         elif right_contact_forces > force_eps and left_contact_forces <= force_eps:
+            if self.left_swing == False:
+                self.taken_step_counter += 1
             self.double_support = False
             self.right_swing = False
             self.left_swing = True
@@ -688,3 +694,6 @@ class BipedEnv(gym.Env):
             draw.rectangle(box, fill=(0,0,0,160))
             draw.text((10+pad, 10+pad), text, fill=(255,255,255), font=font)
         return image
+
+    def return_step_taken(self):
+        return self.taken_step_counter
