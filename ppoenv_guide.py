@@ -8,6 +8,7 @@ import pybullet_data
 import time
 from PIL import Image
 import pybullet as pyb
+from PIL import Image, ImageDraw, ImageFont
 
 class BipedEnv(gym.Env):
     def __init__(self,render=False, render_mode= None, demo_mode=False, demo_type=None):
@@ -61,6 +62,7 @@ class BipedEnv(gym.Env):
         self.p.resetSimulation(physicsClientId=self.physics_client)
         self.p.setGravity(0,0,-9.81)
         self.p.setTimeStep(self.dt)
+        self.taken_step_counter = 0
         if self.demo_mode == True:
             self.p.setPhysicsEngineParameter(
                 fixedTimeStep       = 1.0/1000.0,
@@ -100,8 +102,7 @@ class BipedEnv(gym.Env):
 
         if self.demo_mode == False:
             self.planeId = self.p.loadURDF("plane.urdf",physicsClientId=self.physics_client, baseOrientation=plane_orientation)
-            self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,
-            frictionAnchor=1,physicsClientId=self.physics_client)
+            self.p.changeDynamics(self.planeId, -1, lateralFriction=1.0,physicsClientId=self.physics_client)
         else:
             if (ground_noise != None):
                 self.init_noisy_plane(ground_resolution=ground_resolution, noise_level=ground_noise,baseOrientation=plane_orientation,
@@ -161,7 +162,11 @@ class BipedEnv(gym.Env):
         return self.state, reward, done, truncated, self.state_info
 
     def biped_reward(self,x,torques):
-        self.imitation_decay = 1 #np.exp(-self.step_counter / 20_000_000)  # Decay over 20M steps
+        self.imitation_decay = 1.0# -  0.5*(self.step_counter / 15_000_000)**2
+
+        total_imitation_coeff_decay = 2.15 - (2.15 * self.imitation_decay)
+        other_reward_coeff = (total_imitation_coeff_decay +1.7) / 1.7
+
         self.imitation_weight_hip_pos = 0.75
         self.imitation_weight_knee_pos = 0.75
         self.imitation_weight_ankle_pos = 0.25
@@ -171,8 +176,8 @@ class BipedEnv(gym.Env):
         self.imitation_weight_ankle_vel = 0.1
 
         # 10 M steps is usually 35k episodes
-        self.alive_weight = 0.5
-        self.contact_weight = 0.6
+        self.alive_weight = 0.5 * other_reward_coeff
+        self.contact_weight = 0.6 * other_reward_coeff
         done = False
         reward = 0
 
@@ -226,7 +231,7 @@ class BipedEnv(gym.Env):
         
         # Forward Speed Reward
         current_speed = (self.external_states[1] - self.past_forward_place) / (self.dt * 10)  # forward speed
-        reward += 0.6*(1/self.imitation_decay) * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
+        reward += 0.6* other_reward_coeff * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
 
         #Angle Reward
         if np.abs(self.external_states[3]) > 0.98:  # Robot outside healthy angle range
@@ -270,16 +275,22 @@ class BipedEnv(gym.Env):
                                   right_contact_forces, lfoot_pos, rfoot_pos, force_eps=10):
         
         if left_contact_forces > force_eps and right_contact_forces > force_eps:
+            if self.double_support == False:
+                self.taken_step_counter += 1
             self.double_support = True
             self.right_swing = False
             self.left_swing = False
 
         elif left_contact_forces > force_eps and right_contact_forces <= force_eps:
+            if self.right_swing == False:
+                self.taken_step_counter += 1
             self.double_support = False
             self.right_swing = True
             self.left_swing = False
 
         elif right_contact_forces > force_eps and left_contact_forces <= force_eps:
+            if self.left_swing == False:
+                self.taken_step_counter += 1
             self.double_support = False
             self.right_swing = False
             self.left_swing = True
@@ -613,3 +624,78 @@ class BipedEnv(gym.Env):
         rgb_array = np.reshape(rgbImg, (res, res, 4))
         image = Image.fromarray(rgb_array[:, :, :3], 'RGB')
         return image
+
+    def change_ref_speed(self,new_speed):
+
+        encoder_vec = np.empty((3))   # init_pos + speed + r_leglength + l_leglength + ramp_angle = 0
+        encoder_vec[0] = new_speed/3
+        encoder_vec[1] = self.leg_len /1.5
+        encoder_vec[2] = self.leg_len /1.5
+        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
+        newly_reference = self.findgait(encoder_vec)                     #Find the gait
+        newly_reference = np.clip(newly_reference, -np.pi/2, np.pi/2)     #Clip the gait
+        current_ref_pos = np.array([self.reference[self.reference_idx+self.t,0], self.reference[self.reference_idx+self.t,1], 
+                             self.reference[self.reference_idx+self.t,3],self.reference[self.reference_idx+self.t,4]])
+        
+        # find the closest point in the new reference to the current position
+        ref_pos = np.array([newly_reference[:,0], newly_reference[:,1], 
+                             newly_reference[:,3],newly_reference[:,4]]).T
+        distances = np.linalg.norm(ref_pos - current_ref_pos, axis=1)
+        closest_index = np.argmin(distances) 
+        self.t = closest_index
+        self.reference = newly_reference
+        self.reference_speed = new_speed
+
+
+    def get_follow_camera_image(self, follow_distance=3.0, height=1.5,overlay_text=None):
+        # Get torso link (index 2 in your URDF)
+        torso_state = self.p.getLinkState(self.robot, 2, physicsClientId=self.physics_client)
+        torso_pos = torso_state[0]  # (x,y,z) of torso CoM
+        
+        # Eye = behind torso, Target = torso
+        camera_eye = [torso_pos[0] - follow_distance, torso_pos[1], height]
+        camera_target = [torso_pos[0], torso_pos[1], height]
+
+        view_matrix = self.p.computeViewMatrix(
+            cameraEyePosition=camera_eye,
+            cameraTargetPosition=camera_target,
+            cameraUpVector=[0, 0, 1]
+        )
+        projection_matrix = self.p.computeProjectionMatrixFOV(
+            fov=75,
+            aspect=1.0,
+            nearVal=0.1,
+            farVal=100.0
+        )
+
+        res = 640
+        _, _, rgbImg, _, _ = self.p.getCameraImage(
+            width=res,
+            height=res,
+            viewMatrix=view_matrix,
+            projectionMatrix=projection_matrix
+        )
+
+        rgb_array = np.reshape(rgbImg, (res, res, 4))
+        image = Image.fromarray(rgb_array[:, :, :3], 'RGB')
+
+
+        if overlay_text:
+            draw = ImageDraw.Draw(image)
+            # try to load a nicer font; fallback to default
+            try:
+                font = ImageFont.truetype("DejaVuSansMono.ttf", 22)
+            except:
+                font = ImageFont.load_default()
+
+            # semi-transparent label background
+            text = overlay_text
+            pad = 6
+            tw, th = draw.textbbox((0,0), text, font=font)[2:]
+            box = [(10, 10), (10 + tw + 2*pad, 10 + th + 2*pad)]
+            draw.rectangle(box, fill=(0,0,0,160))
+            draw.text((10+pad, 10+pad), text, fill=(255,255,255), font=font)
+        return image
+
+    def return_step_taken(self):
+        return self.taken_step_counter

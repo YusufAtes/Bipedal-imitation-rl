@@ -54,7 +54,11 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
 
                             dt = 1e-3 #default of pybullet
                             total_rew = 0
-                            
+
+                            terminated = False
+                            episode_start = True
+                            lstm_states = None
+
                             max_steps = int(20 *(1/dt)) # max 20 seconds to cross the floor
                             obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps,
                                                     ground_noise=noise_level, ground_resolution=gamma, 
@@ -64,9 +68,6 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                                 img = env.get_image()
                                 img.save(os.path.join(ppo_path, f"demo_render_{noise_level}_{gamma}.jpg"))
 
-                            terminated = False
-                            episode_start = True
-                            lstm_states = None
 
                             for i in range(0, int(max_steps/10)):
                                 if ppo_type == "lstm":
@@ -195,11 +196,10 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                 total_rew = 0
                 
                 max_steps = int(episode_len*(1/dt))
-                obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
-                terminated = False
-
                 episode_start = True
                 lstm_states = None
+                obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
+                terminated = False
 
                 for i in range(0, int(max_steps/10)):
                     if ppo_type == "lstm":
@@ -263,11 +263,10 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                         total_rew = 0
                         
                         max_steps = int(episode_len*(1/dt))
-                        obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
-                        terminated = False
-
                         episode_start = True
                         lstm_states = None
+                        obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
+                        terminated = False
 
                         for i in range(0, int(max_steps/10)):
                             if ppo_type == "lstm":

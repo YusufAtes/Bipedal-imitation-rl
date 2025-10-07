@@ -96,28 +96,6 @@ namelist = ["ppo_256_256"]
 checkpoint_name = namelist[0]+".zip"
 reward_logger_name = namelist[0]+".csv"
 
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from stable_baselines3.common.monitor import Monitor
-
-def make_env(render=False, demo_mode=False, max_episode_steps=301):
-    def _init():
-        env = BipedEnv(render=render, demo_mode=demo_mode)
-        env = Monitor(env)                            # record episode stats
-        # (optional) hard time-limit:
-        env = gym.wrappers.TimeLimit(env, max_episode_steps)
-        return env
-    return _init
-
-N_ENVS = 4
-vec_env = DummyVecEnv([make_env() for _ in range(N_ENVS)])
-
-# IMPORTANT: create VecNormalize AFTER the vector env
-vec_env = VecNormalize(
-    vec_env,
-    norm_obs=True,          # normalise observations
-    norm_reward=True,       # normalise rewards (fixes your weight-decay issue)
-    clip_reward=10.0        # clip to avoid huge outliers
-)
 # ---------- Entropy‑decay callback ---------------------------------------------
 
 class EntropyDecayCallback(BaseCallback):
@@ -138,7 +116,28 @@ class EntropyDecayCallback(BaseCallback):
         return True
 
 # ---------- MAIN TRAINING LOOP -------------------------------------------------
+import os, gym
+import numpy as np
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
+from stable_baselines3.common.monitor import Monitor
 
+def make_env(idx, render=False, demo_mode=False, max_episode_steps=301, base_seed=0):
+    def _init():
+        # IMPORTANT: start PyBullet in DIRECT mode in your env constructor
+        # e.g., in BipedEnv.__init__: p.connect(p.DIRECT) when render=False
+        env = BipedEnv(render=render, demo_mode=demo_mode)
+        env = Monitor(env)
+        env = gym.wrappers.TimeLimit(env, max_episode_steps)
+        env.seed(base_seed + idx)
+        return env
+    return _init
+
+N_ENVS = 8  # try 4, 6, 8 and compare throughput (steps/sec)
+vec_env = SubprocVecEnv([make_env(i, render=False, demo_mode=False, base_seed=1234)
+                         for i in range(N_ENVS)],
+                        start_method="spawn")  # robust with PyTorch
+
+vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, clip_obs=10.0, clip_reward=10.0)
 if __name__ == "__main__":
     # 0) RUN IDENTIFIER ---------------------------------------------------------
     TOTAL_TIMESTEPS = 15_000_000 # 15 million timesteps

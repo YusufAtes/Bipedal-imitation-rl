@@ -165,7 +165,7 @@ if __name__ == "__main__":
         # clip_range_vf=None,
         target_kl=0.2,  # hard KL ceiling
 
-        learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 1e-4
+        learning_rate=3e-4,  # decay from 3e‑4 → 1e-4
         ent_coef= ENT_START,          # no deduction constant scalar
         policy_kwargs=policy_kwargs
     )

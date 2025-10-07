@@ -140,31 +140,30 @@ if __name__ == "__main__":
 
     callback_list = CallbackList([checkpoint_cb, reward_logger, entropy_decay_cb])
 
-
-
     model = RecurrentPPO(
-        policy="MlpLstmPolicy",            # or "CnnLstmPolicy", "MultiInputLstmPolicy"
-        env=train_env,
-        n_steps=8192,
-        batch_size=256,  # big minibatches for smoother advantages
-        n_epochs=5,
-        clip_range=0.15,  # 0.2
-        # clip_range_vf=None,
-        target_kl=0.2,  # hard KL ceiling
-
-        learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 1e-4
-        ent_coef= ENT_START,          # no deduction constant scalar
-        
+        policy="MlpLstmPolicy",
+        env=BipedEnv(),
+        n_steps=512,
+        batch_size=128,
+        n_epochs=10,
+        learning_rate=3e-4,
+        clip_range=0.2,
+        clip_range_vf=0.2,
+        gae_lambda=0.9,
+        gamma=0.99,
+        ent_coef=ENT_START,
+        vf_coef=0.5,
+        max_grad_norm=0.5,
+        target_kl=0.02,
         policy_kwargs=dict(
-            lstm_hidden_size=64,          # size of recurrent state
-            n_lstm_layers=1,               # stack more layers if needed
-            shared_lstm=False,             # separate actor/critic LSTM towers
-            enable_critic_lstm=False,       # keep critic recurrent
+            lstm_hidden_size=128,
+            n_lstm_layers=1,
+            shared_lstm=True,
+            enable_critic_lstm=False,      
             activation_fn=torch.nn.ReLU,
-            net_arch=dict(pi=[256,256], vf=[256,256]) 
-            # lstm_kwargs={}               # extra nn.LSTM kwargs if needed
+            net_arch=dict(pi=[256], vf=[256]),
         ),
-        tensorboard_log=SAVE_DIR,
+        tensorboard_log="ppo_lstm",
         device="cuda",
     )
     print(model.policy)
