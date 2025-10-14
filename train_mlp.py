@@ -23,7 +23,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 torch.set_num_threads(1)
-set_global_seed(23, deterministic=True)
+set_global_seed(1231, deterministic=True)
 
 t0 = time.time()
 class RewardLoggerCallback(BaseCallback):
@@ -180,4 +180,4 @@ if __name__ == "__main__":
     # 5) SAVE FINAL ARTIFACTS --------------------------------------------------
     model.save(os.path.join(SAVE_DIR, "final_model"))
     print(f"Training complete. Models and logs are in: {SAVE_DIR}")
-    print(f"Total training time: {time.time() - t0:.2f} seconds")       
+    print(f"Total training time: {time.time() - t0:.2f} seconds") 

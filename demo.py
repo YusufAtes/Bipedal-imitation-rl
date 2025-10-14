@@ -61,6 +61,8 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                             total_rew = 0
                             
                             max_steps = int(20 *(1/dt)) # max 20 seconds to cross the floor
+                            episode_start = True
+                            lstm_states = None
                             obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps,
                                                     ground_noise=noise_level, ground_resolution=gamma, 
                                                     heightfield_data=heightfield_data)  # Gym API
@@ -70,8 +72,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                                 img.save(os.path.join(ppo_path, f"demo_render_{noise_level}_{gamma}.jpg"))
 
                             terminated = False
-                            episode_start = True
-                            lstm_states = None
+
 
                             for i in range(0, int(max_steps/10)):
                                 if ppo_type == "lstm":
@@ -323,11 +324,12 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                 total_rew = 0
                 
                 max_steps = int(episode_len*(1/dt))
+                episode_start = True
+                lstm_states = None
                 obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
                 terminated = False
 
-                episode_start = True
-                lstm_states = None
+
 
                 for i in range(0, int(max_steps/10)):
                     if ppo_type == "lstm":
@@ -404,11 +406,12 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                         total_rew = 0
                         
                         max_steps = int(episode_len*(1/dt))
+                        episode_start = True
+                        lstm_states = None
                         obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
                         terminated = False
 
-                        episode_start = True
-                        lstm_states = None
+
 
                         for i in range(0, int(max_steps/10)):
                             if ppo_type == "lstm":
@@ -623,12 +626,13 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         frames = []
         change_interval = episode_len * 100 / len(speed_range)  # Change speed every 5 seconds
         max_steps = int(episode_len*(1/dt))
+        episode_start = True
+        lstm_states = None
         obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
         terminated = False
 
-        episode_start = True
-        lstm_states = None
         previous_place = 0.0
+
         for i in range(0, int(max_steps/10)):
             if ppo_type == "lstm":
                 action, lstm_states = model.predict(obs, state=lstm_states, episode_start=episode_start)
@@ -674,7 +678,82 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         plt.grid()
         plt.savefig(os.path.join(ppo_path, f"demo_velocity_track.png"))
         plt.close()
-        imageio.mimsave("biped_follow.mp4", frames, fps=30)
+        imageio.mimsave("biped_follow_mlp.mp4", frames, fps=30)
+
+
+    elif demo_type == "joint_comparison":
+        t0 = time.time()
+        env = BipedEnv(demo_mode=True, demo_type=demo_type, render_mode= None)
+        model = PPO.load(os.path.join(ppo_path,ppo_file),device='cpu',deterministic=True)
+        model.set_env(env) 
+
+
+        desired_speed = 1.5
+        angle = 0.0
+
+        total_rew = 0
+        success = True
+
+        dt = 1e-3 #default of pybullet
+        total_rew = 0
+        
+        max_steps = int(3*(1/dt))
+        episode_start = True
+        lstm_states = None
+        obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)  # Gym API
+        terminated = False
+
+        rhip_posses = []
+        rknee_posses = []
+        rankle_posses = []
+        lhip_posses = []
+        lknee_posses = []
+        lankle_posses = []
+        times = []
+
+        for i in range(0, int(max_steps/10)):
+            if ppo_type == "lstm":
+                action, lstm_states = model.predict(obs, state=lstm_states, episode_start=episode_start)
+                episode_start = False
+            else:
+                action, _states = model.predict(obs)
+            obs, rewards, dones, truncated, info = env.step(action)
+            total_rew += rewards            
+            ext_state = env.return_external_state()
+
+            if dones:
+                success = False
+                failed_attempts += 1
+                terminated = True
+                break
+            rhip_posses.append(obs[7])
+            rknee_posses.append(obs[8])
+            rankle_posses.append(obs[9])
+            lhip_posses.append(obs[10])
+            lknee_posses.append(obs[11])
+            lankle_posses.append(obs[12])
+            times.append(i*0.01)
+
+        record_data = pd.concat([record_data, pd.DataFrame([{"demo type": demo_type, "cmd speed": 1.5, "angle": None,
+            "mean speed": None,"noise level": None,
+            "resolution": None,"success": success,"max range": None,
+            "trial_no": None,"steps taken": env.return_step_taken()}])], ignore_index=True)
+            
+        # plot the results of the demo make the x axis the speed and the y axis the angle and the color the distance and make the failures red
+        plt.figure(figsize=(8, 6))
+        plt.plot(times, rhip_posses, label='Right Hip')
+        plt.plot(times, rknee_posses, label='Right Knee')
+        plt.plot(times, rankle_posses, label='Right Ankle')
+        plt.plot(times, lhip_posses, label='Left Hip')
+        plt.plot(times, lknee_posses, label='Left Knee')
+        plt.plot(times, lankle_posses, label='Left Ankle')
+        plt.title('Joint Positions over Time')
+        plt.legend(loc='upper left')
+        plt.xlabel("Time (s)")
+        plt.ylabel('Joint Position (rad)')
+        plt.savefig(os.path.join(ppo_path, f"demo_joint_positions.png"))
+        plt.close()
+
     record_data.to_csv(os.path.join(ppo_path, f"demo_data_{demo_type}_{ppo_type}_{scenario_mode}.csv"), index=False)
 
     env.close()
@@ -704,22 +783,22 @@ if __name__ == "__main__":
 
     # # # ----------------------------     END PARAMS     ----------------------------
 
-    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-    #             demo_type=demo_type,ppo_type=ppo_type)
-    # print("Vel diff demo done, starting rotation demo now...")
-    # print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
+    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+                demo_type=demo_type,ppo_type=ppo_type)
+    print("Vel diff demo done, starting rotation demo now...")
+    print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
 
-    # t0 = time.time()
-    # demo_type = "rotation"
-    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-    #             demo_type=demo_type,ppo_type=ppo_type)
+    t0 = time.time()
+    demo_type = "rotation"
+    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+                demo_type=demo_type,ppo_type=ppo_type)
     
-    # print("Rotation demo done, starting noisy demo now...")
-    # print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
+    print("Rotation demo done, starting noisy demo now...")
+    print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
 
     t0 = time.time()
     demo_type = "noisy"

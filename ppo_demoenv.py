@@ -8,6 +8,7 @@ import pybullet_data
 import time
 from PIL import Image
 import pybullet as pyb
+from PIL import Image, ImageDraw, ImageFont
 
 class BipedEnv(gym.Env):
     def __init__(self,render=False, render_mode= None, demo_mode=False, demo_type=None):
@@ -61,6 +62,7 @@ class BipedEnv(gym.Env):
         self.p.resetSimulation(physicsClientId=self.physics_client)
         self.p.setGravity(0,0,-9.81)
         self.p.setTimeStep(self.dt)
+        self.taken_step_counter = 0
         if self.demo_mode == True:
             self.p.setPhysicsEngineParameter(
                 fixedTimeStep       = 1.0/1000.0,
@@ -160,7 +162,11 @@ class BipedEnv(gym.Env):
         return self.state, reward, done, truncated, self.state_info
 
     def biped_reward(self,x,torques):
-        self.imitation_decay = 0#np.exp(-self.step_counter / 60_000_000)  # Decay over 15M steps divided by 60M for lowest 0.779
+
+        alpha_coeff = 0 #0.25*(self.step_counter / 15_000_000)
+        self.imitation_weight = 1.0 -  alpha_coeff
+        self.gait_weight = 1.0 + alpha_coeff
+
         self.imitation_weight_hip_pos = 0.75
         self.imitation_weight_knee_pos = 0.75
         self.imitation_weight_ankle_pos = 0.25
@@ -169,11 +175,9 @@ class BipedEnv(gym.Env):
         self.imitation_weight_knee_vel = 0.15
         self.imitation_weight_ankle_vel = 0.1
 
-        total_imitation_coeff_decay = 2.15 - (2.15 * self.imitation_decay)
-        other_reward_coeff = (total_imitation_coeff_decay +1.7) / 1.7
         # 10 M steps is usually 35k episodes
-        self.alive_weight = 0.5 * other_reward_coeff
-        self.contact_weight = 0.6 * other_reward_coeff
+        self.alive_weight = 0.5 * self.gait_weight
+        self.contact_weight = 0.6 * self.gait_weight
         done = False
         reward = 0
 
@@ -197,37 +201,37 @@ class BipedEnv(gym.Env):
         reward  += self.contact_weight * self.calculate_contact_reward(left_contact, right_contact, left_contact_forces, 
                                                                        right_contact_forces, lfoot_pos, rfoot_pos)
 
-        # #Imitation Reward
-        # hip_joint_pos = x[[7,10]] *self.pos_normcoeff
-        # hip_ref_pos = x[[34,37]] *self.pos_normcoeff
-        # reward += self.imitation_decay * self.imitation_weight_hip_pos * np.exp(-5 *np.linalg.norm(hip_joint_pos - hip_ref_pos))
+        #Imitation Reward
+        hip_joint_pos = x[[7,10]] *self.pos_normcoeff
+        hip_ref_pos = x[[34,37]] *self.pos_normcoeff
+        reward += self.imitation_weight * self.imitation_weight_hip_pos * np.exp(-5 *np.linalg.norm(hip_joint_pos - hip_ref_pos))
 
-        # knee_joint_pos = x[[8,11]] *self.pos_normcoeff
-        # knee_ref_pos = x[[35,38]] *self.pos_normcoeff
-        # reward += self.imitation_decay * self.imitation_weight_knee_pos *np.exp(-5 *np.linalg.norm(knee_joint_pos - knee_ref_pos))
+        knee_joint_pos = x[[8,11]] *self.pos_normcoeff
+        knee_ref_pos = x[[35,38]] *self.pos_normcoeff
+        reward += self.imitation_weight * self.imitation_weight_knee_pos *np.exp(-5 *np.linalg.norm(knee_joint_pos - knee_ref_pos))
 
-        # ankle_joint_pos = x[[9,12]] *self.pos_normcoeff
-        # ankle_ref_pos = x[[36,39]] *self.pos_normcoeff
-        # reward += self.imitation_decay * self.imitation_weight_ankle_pos *np.exp(-5 *np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
+        ankle_joint_pos = x[[9,12]] *self.pos_normcoeff
+        ankle_ref_pos = x[[36,39]] *self.pos_normcoeff
+        reward += self.imitation_weight * self.imitation_weight_ankle_pos *np.exp(-5 *np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
 
-        # hip_joint_vel = x[[28,31]] * self.velocity_normcoeff
-        # hip_ref_vel = x[[52,55]] * self.velocity_normcoeff
-        # reward += self.imitation_decay * self.imitation_weight_hip_vel * np.exp(-0.2*np.linalg.norm(hip_joint_vel - hip_ref_vel))
+        hip_joint_vel = x[[28,31]] * self.velocity_normcoeff
+        hip_ref_vel = x[[52,55]] * self.velocity_normcoeff
+        reward += self.imitation_weight * self.imitation_weight_hip_vel * np.exp(-0.2*np.linalg.norm(hip_joint_vel - hip_ref_vel))
 
-        # knee_joint_vel = x[[29,32]] * self.velocity_normcoeff
-        # knee_ref_vel = x[[53,56]] * self.velocity_normcoeff
-        # reward += self.imitation_decay * self.imitation_weight_knee_vel * np.exp(-0.2*np.linalg.norm(knee_joint_vel - knee_ref_vel))
+        knee_joint_vel = x[[29,32]] * self.velocity_normcoeff
+        knee_ref_vel = x[[53,56]] * self.velocity_normcoeff
+        reward += self.imitation_weight * self.imitation_weight_knee_vel * np.exp(-0.2*np.linalg.norm(knee_joint_vel - knee_ref_vel))
 
-        # ankle_joint_vel = x[[30,33]] * self.velocity_normcoeff
-        # ankle_ref_vel = x[[54,57]] * self.velocity_normcoeff
-        # reward += self.imitation_decay * self.imitation_weight_ankle_vel * np.exp(-0.2*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
+        ankle_joint_vel = x[[30,33]] * self.velocity_normcoeff
+        ankle_ref_vel = x[[54,57]] * self.velocity_normcoeff
+        reward += self.imitation_weight * self.imitation_weight_ankle_vel * np.exp(-0.2*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
 
         #Torque Reward
-        reward -= 1e-3 * np.mean(np.abs(self.target_action))
+        reward -= 1e-3 * np.mean(np.abs(self.target_action)) * self.gait_weight
         
         # Forward Speed Reward
         current_speed = (self.external_states[1] - self.past_forward_place) / (self.dt * 10)  # forward speed
-        reward += 0.6* other_reward_coeff * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
+        reward += 0.6* self.gait_weight * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
 
         #Angle Reward
         if np.abs(self.external_states[3]) > 0.98:  # Robot outside healthy angle range
@@ -271,16 +275,22 @@ class BipedEnv(gym.Env):
                                   right_contact_forces, lfoot_pos, rfoot_pos, force_eps=10):
         
         if left_contact_forces > force_eps and right_contact_forces > force_eps:
+            if self.double_support == False:
+                self.taken_step_counter += 1
             self.double_support = True
             self.right_swing = False
             self.left_swing = False
 
         elif left_contact_forces > force_eps and right_contact_forces <= force_eps:
+            if self.right_swing == False:
+                self.taken_step_counter += 1
             self.double_support = False
             self.right_swing = True
             self.left_swing = False
 
         elif right_contact_forces > force_eps and left_contact_forces <= force_eps:
+            if self.left_swing == False:
+                self.taken_step_counter += 1
             self.double_support = False
             self.right_swing = False
             self.left_swing = True
@@ -359,75 +369,52 @@ class BipedEnv(gym.Env):
         hip_short = upper_len - (upper_len * np.cos(hip_init) )
         knee_short = lower_len - (lower_len * np.cos(knee_init))
         foot_exten = foot_len * np.sin(np.abs(ankle_init))
-        init_pos = 1.195 - hip_short - knee_short 
+        init_pos = 1.185 - hip_short - knee_short 
 
         return init_pos
     
 
     def init_state(self):
-        if self.demo_mode == False:
 
-            start_idx = np.random.randint(0,500)
+        start_idx = 0
 
-            # self.max_steps = self.max_steps - start_idx
-            self.reference_idx = start_idx
+        # self.max_steps = self.max_steps - start_idx
+        self.reference_idx = start_idx
 
-            rhip_pos = self.reference[start_idx,0]
-            rknee_pos = self.reference[start_idx,1]
-            rankle_pos = self.reference[start_idx,2]
-            lhip_pos = self.reference[start_idx,3]
-            lknee_pos = self.reference[start_idx,4]
-            lankle_pos = self.reference[start_idx,5]
-            
-            if np.abs(rhip_pos) > np.abs(lhip_pos):
-                hip_init = lhip_pos
-            else:
-                hip_init = rhip_pos
-
-            if np.abs(rknee_pos) > np.abs(lknee_pos):
-                knee_init = lknee_pos
-            else:
-                knee_init = rknee_pos
-
-            if np.abs(rankle_pos) < np.abs(lankle_pos):
-                ankle_init = lankle_pos
-            else:
-                ankle_init = rankle_pos
-
-            init_z = self.starting_height(hip_init,knee_init,ankle_init)
-            del self.robot
-            self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,init_z + 0.02], self.p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
-            self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0],physicsClientId=self.physics_client)
-
-            self.p.resetJointState(self.robot, 3, targetValue = rhip_pos,physicsClientId=self.physics_client) 
-            self.p.resetJointState(self.robot, 4, targetValue = rknee_pos,physicsClientId=self.physics_client)
-            self.p.resetJointState(self.robot, 5, targetValue = rankle_pos,physicsClientId=self.physics_client)
-            self.p.resetJointState(self.robot, 6, targetValue = lhip_pos,physicsClientId=self.physics_client)
-            self.p.resetJointState(self.robot, 7, targetValue = lknee_pos,physicsClientId=self.physics_client)
-            self.p.resetJointState(self.robot, 8, targetValue = lankle_pos,physicsClientId=self.physics_client)
+        rhip_pos = self.reference[start_idx,0]
+        rknee_pos = self.reference[start_idx,1]
+        rankle_pos = self.reference[start_idx,2]
+        lhip_pos = self.reference[start_idx,3]
+        lknee_pos = self.reference[start_idx,4]
+        lankle_pos = self.reference[start_idx,5]
+        
+        if np.abs(rhip_pos) > np.abs(lhip_pos):
+            hip_init = lhip_pos
         else:
-            start_idx = 0
-            self.reference_idx = start_idx
+            hip_init = rhip_pos
 
-            rhip_pos = 0.0
-            rknee_pos = 0.0
-            rankle_pos = 0.0
-            lhip_pos = 0.0
-            lknee_pos = 0.0
-            lankle_pos = 0.0
-            
+        if np.abs(rknee_pos) > np.abs(lknee_pos):
+            knee_init = lknee_pos
+        else:
+            knee_init = rknee_pos
 
-            init_z = self.starting_height(rhip_pos,lhip_pos,rankle_pos)
-            del self.robot
-            self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,1.185], self.p.getQuaternionFromEuler([0.,0.,0.]))
-            self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0],physicsClientId=self.physics_client)
+        if np.abs(rankle_pos) < np.abs(lankle_pos):
+            ankle_init = lankle_pos
+        else:
+            ankle_init = rankle_pos
 
-            self.p.resetJointState(self.robot, 3, targetValue = rhip_pos,physicsClientId=self.physics_client) 
-            self.p.resetJointState(self.robot, 4, targetValue = rknee_pos,physicsClientId=self.physics_client)
-            self.p.resetJointState(self.robot, 5, targetValue = rankle_pos,physicsClientId=self.physics_client)
-            self.p.resetJointState(self.robot, 6, targetValue = lhip_pos,physicsClientId=self.physics_client)
-            self.p.resetJointState(self.robot, 7, targetValue = lknee_pos,physicsClientId=self.physics_client)
-            self.p.resetJointState(self.robot, 8, targetValue = lankle_pos,physicsClientId=self.physics_client)
+        init_z = self.starting_height(hip_init,knee_init,ankle_init)
+        del self.robot
+        self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,init_z], self.p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
+        self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0],physicsClientId=self.physics_client)
+
+        self.p.resetJointState(self.robot, 3, targetValue = rhip_pos,physicsClientId=self.physics_client) 
+        self.p.resetJointState(self.robot, 4, targetValue = rknee_pos,physicsClientId=self.physics_client)
+        self.p.resetJointState(self.robot, 5, targetValue = rankle_pos,physicsClientId=self.physics_client)
+        self.p.resetJointState(self.robot, 6, targetValue = lhip_pos,physicsClientId=self.physics_client)
+        self.p.resetJointState(self.robot, 7, targetValue = lknee_pos,physicsClientId=self.physics_client)
+        self.p.resetJointState(self.robot, 8, targetValue = lankle_pos,physicsClientId=self.physics_client)
+
 
         self.p.setGravity(0,0,-9.81,physicsClientId=self.physics_client)
         self.p.setTimeStep(self.dt,physicsClientId=self.physics_client)
@@ -478,7 +465,6 @@ class BipedEnv(gym.Env):
         self.state[2] = 0
         self.state[3] = 0
         self.state[4] = 0
-        
         self.past_forward_place = self.external_states[1]
         self.external_states = [pos_x,pos_y,pos_z,roll]
 
@@ -635,3 +621,61 @@ class BipedEnv(gym.Env):
         self.t = closest_index
         self.reference = newly_reference
         self.reference_speed = new_speed
+
+
+    def get_follow_camera_image(self, follow_distance=3.0, height=1.5,overlay_text=None):
+        # Get torso link (index 2 in your URDF)
+        torso_state = self.p.getLinkState(self.robot, 2, physicsClientId=self.physics_client)
+        torso_pos = torso_state[0]  # (x,y,z) of torso CoM
+        
+        # Eye = behind torso, Target = torso
+        camera_eye = [torso_pos[0] - follow_distance, torso_pos[1], height]
+        camera_target = [torso_pos[0], torso_pos[1], height]
+
+        view_matrix = self.p.computeViewMatrix(
+            cameraEyePosition=camera_eye,
+            cameraTargetPosition=camera_target,
+            cameraUpVector=[0, 0, 1]
+        )
+        projection_matrix = self.p.computeProjectionMatrixFOV(
+            fov=75,
+            aspect=1.0,
+            nearVal=0.1,
+            farVal=100.0
+        )
+
+        res = 640
+        _, _, rgbImg, _, _ = self.p.getCameraImage(
+            width=res,
+            height=res,
+            viewMatrix=view_matrix,
+            projectionMatrix=projection_matrix
+        )
+
+        rgb_array = np.reshape(rgbImg, (res, res, 4))
+        image = Image.fromarray(rgb_array[:, :, :3], 'RGB')
+
+
+        if overlay_text:
+            draw = ImageDraw.Draw(image)
+            # try to load a nicer font; fallback to default
+            try:
+                font = ImageFont.truetype("DejaVuSansMono.ttf", 22)
+            except:
+                font = ImageFont.load_default()
+
+            # semi-transparent label background
+            text = overlay_text
+            pad = 6
+            tw, th = draw.textbbox((0,0), text, font=font)[2:]
+            box = [(10, 10), (10 + tw + 2*pad, 10 + th + 2*pad)]
+            draw.rectangle(box, fill=(0,0,0,160))
+            draw.text((10+pad, 10+pad), text, fill=(255,255,255), font=font)
+        return image
+
+    def return_step_taken(self):
+        return self.taken_step_counter
+    
+
+    def return_left_right_swing(self):
+        return self.left_swing, self.right_swing

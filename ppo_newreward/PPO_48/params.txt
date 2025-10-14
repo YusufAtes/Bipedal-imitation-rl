@@ -1,0 +1,1 @@
+self.imitation_decay = 1.0 -  0.75*(self.step_counter / 15_000_000)

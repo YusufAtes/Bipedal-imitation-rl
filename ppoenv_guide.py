@@ -162,7 +162,11 @@ class BipedEnv(gym.Env):
         return self.state, reward, done, truncated, self.state_info
 
     def biped_reward(self,x,torques):
-        self.imitation_decay = 1#np.exp(-self.step_counter / 60_000_000)  # Decay over 15M steps divided by 60M for lowest 0.779
+
+        alpha_coeff = 0 #0.25*(self.step_counter / 15_000_000)
+        self.imitation_weight = 1.0 -  alpha_coeff
+        self.gait_weight = 1.0 + alpha_coeff
+
         self.imitation_weight_hip_pos = 0.75
         self.imitation_weight_knee_pos = 0.75
         self.imitation_weight_ankle_pos = 0.25
@@ -171,11 +175,9 @@ class BipedEnv(gym.Env):
         self.imitation_weight_knee_vel = 0.15
         self.imitation_weight_ankle_vel = 0.1
 
-        total_imitation_coeff_decay = 2.15 - (2.15 * self.imitation_decay)
-        other_reward_coeff = (total_imitation_coeff_decay +1.7) / 1.7
         # 10 M steps is usually 35k episodes
-        self.alive_weight = 0.5 * other_reward_coeff
-        self.contact_weight = 0.6 * other_reward_coeff
+        self.alive_weight = 0.5 * self.gait_weight
+        self.contact_weight = 0.6 * self.gait_weight
         done = False
         reward = 0
 
@@ -202,34 +204,34 @@ class BipedEnv(gym.Env):
         #Imitation Reward
         hip_joint_pos = x[[7,10]] *self.pos_normcoeff
         hip_ref_pos = x[[34,37]] *self.pos_normcoeff
-        reward += self.imitation_decay * self.imitation_weight_hip_pos * np.exp(-5 *np.linalg.norm(hip_joint_pos - hip_ref_pos))
+        reward += self.imitation_weight * self.imitation_weight_hip_pos * np.exp(-5 *np.linalg.norm(hip_joint_pos - hip_ref_pos))
 
         knee_joint_pos = x[[8,11]] *self.pos_normcoeff
         knee_ref_pos = x[[35,38]] *self.pos_normcoeff
-        reward += self.imitation_decay * self.imitation_weight_knee_pos *np.exp(-5 *np.linalg.norm(knee_joint_pos - knee_ref_pos))
+        reward += self.imitation_weight * self.imitation_weight_knee_pos *np.exp(-5 *np.linalg.norm(knee_joint_pos - knee_ref_pos))
 
         ankle_joint_pos = x[[9,12]] *self.pos_normcoeff
         ankle_ref_pos = x[[36,39]] *self.pos_normcoeff
-        reward += self.imitation_decay * self.imitation_weight_ankle_pos *np.exp(-5 *np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
+        reward += self.imitation_weight * self.imitation_weight_ankle_pos *np.exp(-5 *np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
 
         hip_joint_vel = x[[28,31]] * self.velocity_normcoeff
         hip_ref_vel = x[[52,55]] * self.velocity_normcoeff
-        reward += self.imitation_decay * self.imitation_weight_hip_vel * np.exp(-0.2*np.linalg.norm(hip_joint_vel - hip_ref_vel))
+        reward += self.imitation_weight * self.imitation_weight_hip_vel * np.exp(-0.2*np.linalg.norm(hip_joint_vel - hip_ref_vel))
 
         knee_joint_vel = x[[29,32]] * self.velocity_normcoeff
         knee_ref_vel = x[[53,56]] * self.velocity_normcoeff
-        reward += self.imitation_decay * self.imitation_weight_knee_vel * np.exp(-0.2*np.linalg.norm(knee_joint_vel - knee_ref_vel))
+        reward += self.imitation_weight * self.imitation_weight_knee_vel * np.exp(-0.2*np.linalg.norm(knee_joint_vel - knee_ref_vel))
 
         ankle_joint_vel = x[[30,33]] * self.velocity_normcoeff
         ankle_ref_vel = x[[54,57]] * self.velocity_normcoeff
-        reward += self.imitation_decay * self.imitation_weight_ankle_vel * np.exp(-0.2*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
+        reward += self.imitation_weight * self.imitation_weight_ankle_vel * np.exp(-0.2*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
 
         #Torque Reward
-        reward -= 1e-3 * np.mean(np.abs(self.target_action))
+        reward -= 1e-3 * np.mean(np.abs(self.target_action)) * self.gait_weight
         
         # Forward Speed Reward
         current_speed = (self.external_states[1] - self.past_forward_place) / (self.dt * 10)  # forward speed
-        reward += 0.6* other_reward_coeff * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
+        reward += 0.6* self.gait_weight * np.exp(-2*np.abs(current_speed - self.reference_speed))  # reward for maintaining speed newly adjusted
 
         #Angle Reward
         if np.abs(self.external_states[3]) > 0.98:  # Robot outside healthy angle range

@@ -97,28 +97,6 @@ namelist = ["ppo_256_256"]
 checkpoint_name = namelist[0]+".zip"
 reward_logger_name = namelist[0]+".csv"
 
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from stable_baselines3.common.monitor import Monitor
-
-def make_env(render=False, demo_mode=False, max_episode_steps=301):
-    def _init():
-        env = BipedEnv(render=render, demo_mode=demo_mode)
-        env = Monitor(env)                            # record episode stats
-        # (optional) hard time-limit:
-        env = gym.wrappers.TimeLimit(env, max_episode_steps)
-        return env
-    return _init
-
-N_ENVS = 4
-vec_env = DummyVecEnv([make_env() for _ in range(N_ENVS)])
-
-# IMPORTANT: create VecNormalize AFTER the vector env
-vec_env = VecNormalize(
-    vec_env,
-    norm_obs=True,          # normalise observations
-    norm_reward=True,       # normalise rewards (fixes your weight-decay issue)
-    clip_reward=10.0        # clip to avoid huge outliers
-)
 # ---------- Entropy‑decay callback ---------------------------------------------
 
 class EntropyDecayCallback(BaseCallback):
@@ -139,35 +117,54 @@ class EntropyDecayCallback(BaseCallback):
         return True
 
 # ---------- MAIN TRAINING LOOP -------------------------------------------------
+import os
+import numpy as np
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
+from stable_baselines3.common.monitor import Monitor
+
+def make_env(rank: int, base_seed: int = 0, max_episode_steps: int = 301):
+    def _init():
+        env = BipedEnv(render=False, demo_mode=False)   # ensure p.DIRECT inside BipedEnv
+        env = Monitor(env)
+        env = gym.wrappers.TimeLimit(env, max_episode_steps)
+
+        # Gymnasium-style seeding:
+        seed = base_seed + rank
+        # 1) seed action/obs spaces (optional but nice)
+        if hasattr(env, "action_space") and hasattr(env.action_space, "seed"):
+            env.action_space.seed(seed)
+        if hasattr(env, "observation_space") and hasattr(env.observation_space, "seed"):
+            env.observation_space.seed(seed)
+        # 2) reset with seed (this is the canonical way in Gymnasium)
+        env.reset(seed=seed)
+
+        return env
+    return _init
+
 
 if __name__ == "__main__":
-    # 0) RUN IDENTIFIER ---------------------------------------------------------
-    TOTAL_TIMESTEPS = 15_000_000 # 15 million timesteps
+    # ---- 1) Multiprocessing start method
+    import multiprocessing as mp
+    mp.set_start_method("spawn", force=True)  # crucial on Linux + PyTorch
+
+    # ---- 2) Build vectorized env in subprocesses
+    N_ENVS = 4   # try 4/6/8 and benchmark
+    env_fns = [make_env(i, base_seed=1234) for i in range(N_ENVS)]
+    vec_env = SubprocVecEnv(env_fns, start_method="spawn")
+
+    # ---- 3) Normalization AFTER vec env
+    vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=True,
+                           clip_obs=10.0, clip_reward=10.0)
     SAVE_DIR = "ppo_newreward"
-    os.makedirs(SAVE_DIR, exist_ok=True)
-
-    # 1) ENVIRONMENT ------------------------------------------------------------
-    train_env = BipedEnv()
-    # If you have a CurriculumWrapper defined, enable it like this:
-    # train_env = CurriculumWrapper(train_env)
-
-    # 2) CALLBACKS --------------------------------------------------------------
-    checkpoint_cb = CustomCheckpointCallback(
-        save_freq=500_000,
-        save_path=SAVE_DIR,
-        verbose=1,
-    )
-    reward_logger = RewardLoggerCallback(
-        log_file=os.path.join(SAVE_DIR, "rewards.csv")
-    )
-
-    # Entropy decays linearly 1e‑3 → 0 across training
-    ENT_START = 1e-3  # initial entropy coefficient
-    ENT_END   = 1e-4  # final entropy coefficient
-    entropy_decay_cb = EntropyDecayCallback(ENT_START, ENT_END, TOTAL_TIMESTEPS)
-
+    TOTAL_TIMESTEPS = 15_000_000
+    # ---- 4) Callbacks (define these classes elsewhere; they must be importable)
+    checkpoint_cb = CustomCheckpointCallback(save_freq=500_000, save_path=SAVE_DIR, verbose=1)
+    reward_logger = RewardLoggerCallback(log_file=os.path.join(SAVE_DIR, "rewards.csv"))
+    ENT_START, ENT_END = 1e-3, 1e-4
+    entropy_decay_cb = EntropyDecayCallback(ENT_START, ENT_END, total_timesteps=TOTAL_TIMESTEPS)
     callback_list = CallbackList([checkpoint_cb, reward_logger, entropy_decay_cb])
 
+    os.makedirs(SAVE_DIR, exist_ok=True)
     # 3) MODEL CONFIGURATION ----------------------------------------------------
     policy_kwargs = dict(
         activation_fn=torch.nn.ReLU,
@@ -188,7 +185,7 @@ if __name__ == "__main__":
         # clip_range_vf=None,
         target_kl=0.2,  # hard KL ceiling
 
-        learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 1e-4
+        learning_rate=3e-4,  # decay from 3e‑4 → 1e-4
         ent_coef= ENT_START,          # no deduction constant scalar
         policy_kwargs=policy_kwargs
     )

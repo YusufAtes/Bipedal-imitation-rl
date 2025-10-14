@@ -6,10 +6,10 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ppo_path = "ppo_newreward/PPO_46"
+ppo_path = "ppo_newreward/PPO_39"
 env = BipedEnv(demo_mode=True,render_mode="human")
-# ppo_file = "model_checkpoint_10ppo_256_256.zip"
-ppo_file = "final_model.zip"
+ppo_file = "model_checkpoint_29ppo_256_256.zip"
+# ppo_file = "final_model.zip"
 
 demo_type = "mlp"
 # ppo_path = "ppo_256_256/PPO_22"
@@ -48,7 +48,7 @@ episode_len = 5
 total_rew = 0
 ground_noise = 0.0
 gamma = 0.5
-case_no = 1
+case_no = 4
 
 for current_no in range(case_no):
     
@@ -56,14 +56,14 @@ for current_no in range(case_no):
     past_lhip = []
     total_attempts += 1
     succes = True
-    test_speed = 0.3
+    test_speed = 1.5
     test_angle = 0.0
 
     episode_start = True
     lstm_states = None
 
     dt = 1e-3 #default of pybullet
-    episode_len = 50
+    episode_len = 10
     max_steps = int(episode_len*(1/dt))
     if ground_noise > 0:
         heightfield_data = np.load(f"noise_planes/plane_{gamma}_0.npy")
@@ -99,16 +99,16 @@ for current_no in range(case_no):
         else:
             action, _states = model.predict(obs)
 
-        if i % speed_change_interval == 0:
-            env.change_ref_speed(test_speed)
-            if reverse == True:
-                test_speed = max(test_speed - 0.3, 0.2)
-                if test_speed == 0.2:
-                    reverse = False
-            else:
-                test_speed = min(test_speed + 0.3, 2.0)
-                if test_speed == 2.0:
-                    reverse = True
+        # if i % speed_change_interval == 0:
+        #     env.change_ref_speed(test_speed)
+        #     if reverse == True:
+        #         test_speed = max(test_speed - 0.3, 0.2)
+        #         if test_speed == 0.2:
+        #             reverse = False
+        #     else:
+        #         test_speed = min(test_speed + 0.3, 2.0)
+        #         if test_speed == 2.0:
+        #             reverse = True
 
         obs, rewards, dones, truncated, info = env.step(action)
         past_rhip.append(obs[7])
@@ -121,6 +121,7 @@ for current_no in range(case_no):
                 current_time.append(i*0.01)
             prev_pos = env.return_external_state()[1]
         ext_state = env.return_external_state()
+        time.sleep(0.01)
         if dones:
             succes = False
             mean_speed = 0
@@ -148,12 +149,12 @@ for current_no in range(case_no):
             succes = False
 total_rew /= case_no
 print(f"Total Reward: {total_rew}")
-plt.figure()
-plt.plot(current_time,desired_speeds,label='Desired Speeds')
-plt.plot(current_time,actual_speeds,label='Actual Speeds')
-plt.legend()
-plt.xlabel('Time (s)')
-plt.ylabel('Speed (m/s)')
-plt.title('Desired vs Actual Speeds')
-plt.savefig('speed_tracking.png')
-plt.show()
+# plt.figure()
+# plt.plot(current_time,desired_speeds,label='Desired Speeds')
+# plt.plot(current_time,actual_speeds,label='Actual Speeds')
+# plt.legend()
+# plt.xlabel('Time (s)')
+# plt.ylabel('Speed (m/s)')
+# plt.title('Desired vs Actual Speeds')
+# plt.savefig('speed_tracking.png')
+# plt.show()

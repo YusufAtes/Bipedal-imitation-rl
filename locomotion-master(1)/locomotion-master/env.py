@@ -67,7 +67,6 @@ class Biped2dBullet(gym.Env):
                 self.p.changeDynamics(plane_id, -1, lateralFriction=self.mu, contactStiffness=self.ground_kp, contactDamping=self.ground_kd) 
         else:
             self.init_noisy_plane(noise_level=0.1, heightfield_data=heightfield_data)
-            print("Ground initialized")
 
         #disable motors (in order to do control via torques)
         for joint in range(p.getNumJoints(self.sim_id)):
@@ -178,6 +177,7 @@ class Biped2dBullet(gym.Env):
             joint_state = self.p.getJointState(self.sim_id,j)
             state.append(joint_state[0])
             state.append(joint_state[1])
+
         for j in range(2,9):
             link_state = self.p.getLinkState(self.sim_id, j, computeLinkVelocity=1)
             state.append(link_state[0][0])
