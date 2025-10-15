@@ -22,7 +22,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
     angles = np.linspace(-15, 15, angle_len)
 
     noise_levels = np.arange(1,20,1)
-    gammas = [0.25, 0.5, 1.0, 1.5, 2.0]  # Different resolutions for the ground
+    gammas = [0.25, 0.5, 1.0, 2.0]  # Different resolutions for the ground
     record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
                                         "resolution","success","max range","trial_no"])
     if demo_type == "noisy":
@@ -767,7 +767,7 @@ if __name__ == "__main__":
     ppo_type = "mlp"                # "lstm" or "mlp"
     demo_type = "vel_diff"          # "rotation" or "noisy"
 
-    ppo_path = "ppo_newreward/PPO_39"
+    ppo_path = "ppo_025_decay/PPO_1"
     ppo_file = "final_model.zip"
 
     scenario_mode = 0

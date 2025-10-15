@@ -23,7 +23,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 torch.set_num_threads(1)
-set_global_seed(1231, deterministic=True)
+set_global_seed(23, deterministic=True)
 
 t0 = time.time()
 class RewardLoggerCallback(BaseCallback):
@@ -120,7 +120,7 @@ class EntropyDecayCallback(BaseCallback):
 if __name__ == "__main__":
     # 0) RUN IDENTIFIER ---------------------------------------------------------
     TOTAL_TIMESTEPS = 15_000_000 # 15 million timesteps
-    SAVE_DIR = "ppo_newreward"
+    SAVE_DIR = "ppo_025_decay"
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     # 1) ENVIRONMENT ------------------------------------------------------------
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         n_steps=8192,
         batch_size=256,  # big minibatches for smoother advantages
         n_epochs=5,
-        clip_range=0.15,  # 0.2
+        clip_range=0.18,  # 0.2
         # clip_range_vf=None,
         target_kl=0.2,  # hard KL ceiling
 
