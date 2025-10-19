@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.signal import resample
+from skrl.agents.torch.amp.amp import F
 import torch
 from gait_generator_net import SimpleFCNN
 import gymnasium as gym
@@ -24,6 +25,14 @@ class BipedEnv(gym.Env):
         self.demo_mode = demo_mode
         self.demo_type = demo_type
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        if self.demo_mode == False:
+            # Optimize physics for speed
+            self.p.setPhysicsEngineParameter(
+                fixedTimeStep=self.dt,
+                numSolverIterations=10,  # Reduce from default 20
+                enableConeFriction=0,    # Disable cone friction for speed
+                deterministicOverlappingPairs=0  # Disable for speed
+            )
 
         self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,1.185], self.p.getQuaternionFromEuler([0.,0.,0.])
         ,physicsClientId=self.physics_client)
@@ -32,18 +41,24 @@ class BipedEnv(gym.Env):
         self.render_mode = render_mode
         self.joint_idx = [2,3,4,5,6,7,8]
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.num_envs = 1  # Required by SKRL
         self.max_steps = int(3*(1/self.dt))
         self.action_space = spaces.Box(low=-1, high=1, shape=(7,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-100, high=100, shape=(58,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-100, high=100, shape=(56,), dtype=np.float32)
+        self.amp_observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(300,), dtype=np.float32)
+        self.amp_q_hist = torch.zeros(1, 50, 6, dtype=torch.float32, device=self.device)
+        self.num_agents = 1
 
         self.t = 0
         self.gaitgen_net = SimpleFCNN()
         self.gaitgen_net.load_state_dict(torch.load('final_model.pth',weights_only=True))
+        self.gaitgen_net.to(self.device)
         
         self.normalizationconst = np.load(rf"newnormalization_constants.npy")
         self.joint_no = self.p.getNumJoints(self.robot,physicsClientId=self.physics_client)
         self.max_torque = np.array([500,500,300,150,500,300,150])  # max torque for each joint defined in urdf file
-        self.state = np.zeros(58)
+        self.state = np.zeros(56)
         self.update_const = 0.75
         self.velocity_normcoeff = 10.0
         self.pos_normcoeff = np.pi
@@ -94,7 +109,7 @@ class BipedEnv(gym.Env):
         encoder_vec[0] = self.reference_speed/3
         encoder_vec[1] = self.leg_len /1.5
         encoder_vec[2] = self.leg_len /1.5
-        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
+        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32, device=self.device)    
         self.reference = self.findgait(encoder_vec)                     #Find the gait
         self.reference = np.clip(self.reference, -np.pi/2, np.pi/2)     #Clip the gait
 
@@ -126,10 +141,19 @@ class BipedEnv(gym.Env):
         self.ground_noise = ground_noise if ground_noise is not None else 0.0
         self.init_state()
         self.return_state()
-        return self.state, self.reset_info
+        # Convert numpy array to torch tensor for SKRL compatibility
+        # Shape it properly for batch processing [num_envs, obs_dim]
+        state_tensor = torch.from_numpy(self.state).float().to(self.device).unsqueeze(0)
+        return state_tensor, self.reset_info
 
     def step(self,torques):
         self.step_counter += 1
+        # Convert torch tensor to numpy if needed
+        if torch.is_tensor(torques):
+            torques = torques.cpu().numpy()
+        # Ensure torques is 1D array for PyBullet
+        if torques.ndim > 1:
+            torques = torques.flatten()
         # Set torques
         if self.demo_mode == False:
             self.target_action = (torques) * self.max_torque
@@ -152,6 +176,9 @@ class BipedEnv(gym.Env):
         self.past2_target_action = self.past_target_action
         self.return_state()
 
+        self.amp_q_hist = torch.roll(self.amp_q_hist, shifts=-1, dims=1)
+        self.amp_q_hist[:, -1, :] = torch.tensor(self.state[4:10]*self.pos_normcoeff, dtype=torch.float32, device=self.device)
+
         if self.render_mode == 'human':
             time.sleep(self.dt)
         reward, done = self.biped_reward(self.state,torques=self.target_action)
@@ -159,14 +186,28 @@ class BipedEnv(gym.Env):
 
         if self.t > self.max_steps:
             truncated = True
-        return self.state, reward, done, truncated, self.state_info
+        # Convert numpy array to torch tensor for SKRL compatibility
+        # Shape it properly for batch processing [num_envs, obs_dim]
+        state_tensor = torch.from_numpy(self.state).float().to(self.device).unsqueeze(0)
+        # Convert reward to torch tensor for SKRL compatibility
+        # Shape it properly for batch processing [num_envs, 1]
+        reward_tensor = torch.tensor([reward], dtype=torch.float32, device=self.device).unsqueeze(-1)
+        # Convert done and truncated to torch tensors for SKRL compatibility
+        # Shape them properly for batch processing [num_envs, 1]
+        done_tensor = torch.tensor([done], dtype=torch.bool, device=self.device).unsqueeze(-1)
+        truncated_tensor = torch.tensor([truncated], dtype=torch.bool, device=self.device).unsqueeze(-1)
+
+        # 3) build AMP obs for discriminator and store it in info
+        amp_obs = self.collect_observation()                  # torch (num_envs, 300) on env.device
+        info = {"amp_obs": amp_obs}
+        return state_tensor, reward_tensor, done_tensor, truncated_tensor, info
 
     def biped_reward(self,x,torques):
         if self.step_counter % 100_000 == 0:
             print(self.step_counter)
-        alpha_coeff = 0.25*(self.step_counter / 15_000_000)
-        self.imitation_weight = 1.0 -  alpha_coeff
-        self.gait_weight = 1.0 + alpha_coeff
+        # alpha_coeff = 0.25*(self.step_counter / 15_000_000)
+        # self.imitation_weight = 1.0 -  alpha_coeff
+        self.gait_weight = 1.0
 
         self.imitation_weight_hip_pos = 0.75
         self.imitation_weight_knee_pos = 0.75
@@ -202,30 +243,30 @@ class BipedEnv(gym.Env):
         reward  += self.contact_weight * self.calculate_contact_reward(left_contact, right_contact, left_contact_forces, 
                                                                        right_contact_forces, lfoot_pos, rfoot_pos)
 
-        #Imitation Reward
-        hip_joint_pos = x[[7,10]] *self.pos_normcoeff
-        hip_ref_pos = x[[34,37]] *self.pos_normcoeff
-        reward += self.imitation_weight * self.imitation_weight_hip_pos * np.exp(-5 *np.linalg.norm(hip_joint_pos - hip_ref_pos))
+        # #Imitation Reward
+        # hip_joint_pos = x[[7,10]] *self.pos_normcoeff
+        # hip_ref_pos = x[[34,37]] *self.pos_normcoeff
+        # reward += self.imitation_weight * self.imitation_weight_hip_pos * np.exp(-5 *np.linalg.norm(hip_joint_pos - hip_ref_pos))
 
-        knee_joint_pos = x[[8,11]] *self.pos_normcoeff
-        knee_ref_pos = x[[35,38]] *self.pos_normcoeff
-        reward += self.imitation_weight * self.imitation_weight_knee_pos *np.exp(-5 *np.linalg.norm(knee_joint_pos - knee_ref_pos))
+        # knee_joint_pos = x[[8,11]] *self.pos_normcoeff
+        # knee_ref_pos = x[[35,38]] *self.pos_normcoeff
+        # reward += self.imitation_weight * self.imitation_weight_knee_pos *np.exp(-5 *np.linalg.norm(knee_joint_pos - knee_ref_pos))
 
-        ankle_joint_pos = x[[9,12]] *self.pos_normcoeff
-        ankle_ref_pos = x[[36,39]] *self.pos_normcoeff
-        reward += self.imitation_weight * self.imitation_weight_ankle_pos *np.exp(-5 *np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
+        # ankle_joint_pos = x[[9,12]] *self.pos_normcoeff
+        # ankle_ref_pos = x[[36,39]] *self.pos_normcoeff
+        # reward += self.imitation_weight * self.imitation_weight_ankle_pos *np.exp(-5 *np.linalg.norm(ankle_joint_pos - ankle_ref_pos))
 
-        hip_joint_vel = x[[28,31]] * self.velocity_normcoeff
-        hip_ref_vel = x[[52,55]] * self.velocity_normcoeff
-        reward += self.imitation_weight * self.imitation_weight_hip_vel * np.exp(-0.2*np.linalg.norm(hip_joint_vel - hip_ref_vel))
+        # hip_joint_vel = x[[28,31]] * self.velocity_normcoeff
+        # hip_ref_vel = x[[52,55]] * self.velocity_normcoeff
+        # reward += self.imitation_weight * self.imitation_weight_hip_vel * np.exp(-0.2*np.linalg.norm(hip_joint_vel - hip_ref_vel))
 
-        knee_joint_vel = x[[29,32]] * self.velocity_normcoeff
-        knee_ref_vel = x[[53,56]] * self.velocity_normcoeff
-        reward += self.imitation_weight * self.imitation_weight_knee_vel * np.exp(-0.2*np.linalg.norm(knee_joint_vel - knee_ref_vel))
+        # knee_joint_vel = x[[29,32]] * self.velocity_normcoeff
+        # knee_ref_vel = x[[53,56]] * self.velocity_normcoeff
+        # reward += self.imitation_weight * self.imitation_weight_knee_vel * np.exp(-0.2*np.linalg.norm(knee_joint_vel - knee_ref_vel))
 
-        ankle_joint_vel = x[[30,33]] * self.velocity_normcoeff
-        ankle_ref_vel = x[[54,57]] * self.velocity_normcoeff
-        reward += self.imitation_weight * self.imitation_weight_ankle_vel * np.exp(-0.2*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
+        # ankle_joint_vel = x[[30,33]] * self.velocity_normcoeff
+        # ankle_ref_vel = x[[54,57]] * self.velocity_normcoeff
+        # reward += self.imitation_weight * self.imitation_weight_ankle_vel * np.exp(-0.2*np.linalg.norm(ankle_joint_vel - ankle_ref_vel))
 
         #Torque Reward
         reward -= 1e-3 * np.mean(np.abs(self.target_action)) * self.gait_weight
@@ -318,6 +359,10 @@ class BipedEnv(gym.Env):
         else:
             return 0
         
+    def render(self):
+        """Render the environment. For PyBullet environments, this is handled automatically."""
+        pass
+    
     def close(self):
         self.p.disconnect(physicsClientId=self.physics_client)
         print("Environment closed")
@@ -327,7 +372,7 @@ class BipedEnv(gym.Env):
 
         freqs = self.gaitgen_net(input_vec)
         predictions = freqs.reshape(-1,6,2,17)
-        predictions = predictions.detach().numpy()
+        predictions = predictions.detach().cpu().numpy()
         predictions = predictions[0]
         predictions = self.denormalize(predictions)
         pred_time = self.pred_ifft(predictions)
@@ -486,34 +531,31 @@ class BipedEnv(gym.Env):
         # print(ref_rhip_vel, ref_rknee_vel, ref_rankle_vel,ref_lhip_vel, ref_lknee_vel, ref_lankle_vel)
         self.state[0] = self.reference_speed /3 
         self.state[1] = self.ramp_angle 
-        self.state[2] = 0
-        self.state[3] = 0
-        self.state[4] = 0
         
         self.past_forward_place = self.external_states[1]
         self.external_states = [pos_x,pos_y,pos_z,roll]
 
-        self.state[5] = y_vel   / 3
+        self.state[2] = y_vel   / 3
 
-        self.state[6:13] = np.array([self.torso_pos, self.rhip_pos, self.rknee_pos, self.rankle_pos, self.lhip_pos, self.lknee_pos, self.lankle_pos]) /self.pos_normcoeff
+        self.state[3:10] = np.array([self.torso_pos, self.rhip_pos, self.rknee_pos, self.rankle_pos, self.lhip_pos, self.lknee_pos, self.lankle_pos]) /self.pos_normcoeff
 
-        self.state[13:20] = np.array([self.past_target_action[0]/self.max_torque[0], self.past_target_action[1]/self.max_torque[1], self.past_target_action[2]/self.max_torque[2], 
+        self.state[10:17] = np.array([self.past_target_action[0]/self.max_torque[0], self.past_target_action[1]/self.max_torque[1], self.past_target_action[2]/self.max_torque[2], 
                              self.past_target_action[3]/self.max_torque[3], self.past_target_action[4]/self.max_torque[4], self.past_target_action[5]/self.max_torque[5], 
                              self.past_target_action[6]/self.max_torque[6]])
         
-        self.state[20:27] = np.array([self.t1_torso_pos, self.t1_rhip_pos, self.t1_rknee_pos, self.t1_rankle_pos, self.t1_lhip_pos, 
+        self.state[17:24] = np.array([self.t1_torso_pos, self.t1_rhip_pos, self.t1_rknee_pos, self.t1_rankle_pos, self.t1_lhip_pos, 
                              self.t1_lknee_pos, self.t1_lankle_pos]) /self.pos_normcoeff
         # self.state[27:34] = [self.past2_target_action[0]/self.max_torque, self.past2_target_action[1]/self.max_torque, self.past2_target_action[2]/self.max_torque,
         #                      self.past2_target_action[3]/self.max_torque, self.past2_target_action[4]/self.max_torque, self.past2_target_action[5]/self.max_torque,
         #                      self.past2_target_action[6]/self.max_torque]
-        self.state[27:34] = np.array([self.torso_vel, self.rhip_vel, self.rknee_vel, self.rankle_vel, self.lhip_vel, 
+        self.state[24:31] = np.array([self.torso_vel, self.rhip_vel, self.rknee_vel, self.rankle_vel, self.lhip_vel, 
                              self.lknee_vel, self.lankle_vel]) /self.velocity_normcoeff
 
-        self.state[34:40] = np.array([self.reference[self.reference_idx+self.t,0], self.reference[self.reference_idx+self.t,1], 
+        self.state[31:37] = np.array([self.reference[self.reference_idx+self.t,0], self.reference[self.reference_idx+self.t,1], 
                              self.reference[self.reference_idx+self.t,2], self.reference[self.reference_idx+self.t,3],
                              self.reference[self.reference_idx+self.t,4], self.reference[self.reference_idx+self.t,5]]) / self.pos_normcoeff
         
-        self.state[40:46] = np.array([self.reference[self.reference_idx+self.t+10,0], self.reference[self.reference_idx+self.t+10,1],
+        self.state[37:43] = np.array([self.reference[self.reference_idx+self.t+10,0], self.reference[self.reference_idx+self.t+10,1],
                                 self.reference[self.reference_idx+self.t+10,2], self.reference[self.reference_idx+self.t+10,3],
                                 self.reference[self.reference_idx+self.t+10,4], self.reference[self.reference_idx+self.t+10,5]]) / self.pos_normcoeff
         
@@ -521,11 +563,11 @@ class BipedEnv(gym.Env):
         #                         self.reference[self.reference_idx+self.t+50,2], self.reference[self.reference_idx+self.t+50,3],
         #                         self.reference[self.reference_idx+self.t+50,4], self.reference[self.reference_idx+self.t+50,5]]
         
-        self.state[46:52] = np.array([self.reference[self.reference_idx+self.t+100,0], self.reference[self.reference_idx+self.t+100,1],
+        self.state[43:49] = np.array([self.reference[self.reference_idx+self.t+100,0], self.reference[self.reference_idx+self.t+100,1],
                                 self.reference[self.reference_idx+self.t+100,2], self.reference[self.reference_idx+self.t+100,3],
                                 self.reference[self.reference_idx+self.t+100,4], self.reference[self.reference_idx+self.t+100,5]]) / self.pos_normcoeff
         
-        self.state[52:58] = np.array([ref_rhip_vel, ref_rknee_vel, ref_rankle_vel,ref_lhip_vel, ref_lknee_vel, ref_lankle_vel]) /self.velocity_normcoeff
+        self.state[49:55] = np.array([ref_rhip_vel, ref_rknee_vel, ref_rankle_vel,ref_lhip_vel, ref_lknee_vel, ref_lankle_vel]) /self.velocity_normcoeff
         
         self.t1_torso_pos = self.torso_pos
         self.t1_rhip_pos = self.rhip_pos
@@ -632,7 +674,7 @@ class BipedEnv(gym.Env):
         encoder_vec[0] = new_speed/3
         encoder_vec[1] = self.leg_len /1.5
         encoder_vec[2] = self.leg_len /1.5
-        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32)    
+        encoder_vec = torch.tensor(encoder_vec, dtype=torch.float32, device=self.device)    
         newly_reference = self.findgait(encoder_vec)                     #Find the gait
         newly_reference = np.clip(newly_reference, -np.pi/2, np.pi/2)     #Clip the gait
         current_ref_pos = np.array([self.reference[self.reference_idx+self.t,0], self.reference[self.reference_idx+self.t,1], 
@@ -700,3 +742,11 @@ class BipedEnv(gym.Env):
 
     def return_step_taken(self):
         return self.taken_step_counter
+
+    def collect_observation(self):
+        # flatten (num_envs, 50, 6) -> (num_envs, 300)
+        x = self.amp_q_hist.reshape(self.num_envs, -1)
+        # optional normalization if you set env.amp_mean / env.amp_std from train script
+        if hasattr(self, "amp_mean") and hasattr(self, "amp_std"):
+            x = (x - self.amp_mean) / self.amp_std
+        return x.to(self.device)

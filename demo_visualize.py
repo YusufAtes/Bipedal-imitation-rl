@@ -6,7 +6,7 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ppo_path = "ppo_newreward/PPO_39"
+ppo_path = "configurations/nodecay_mlp_rsi/PPO_39"
 env = BipedEnv(demo_mode=True,render_mode="human")
 ppo_file = "model_checkpoint_29ppo_256_256.zip"
 # ppo_file = "final_model.zip"
@@ -38,7 +38,6 @@ model = PPO.load(os.path.join(ppo_path,ppo_file),device='cpu',deterministic=True
 model.set_env(env) 
 
 
-
 total_attempts = 0
 failed_attempts = 0
 start_pos = 0
@@ -46,9 +45,9 @@ max_speed = 0
 episode_len = 5
 
 total_rew = 0
-ground_noise = 0.0
+ground_noise = 7
 gamma = 0.5
-case_no = 4
+case_no = 5
 
 for current_no in range(case_no):
     
@@ -67,7 +66,7 @@ for current_no in range(case_no):
     max_steps = int(episode_len*(1/dt))
     if ground_noise > 0:
         heightfield_data = np.load(f"noise_planes/plane_{gamma}_0.npy")
-
+        heightfield_data = ground_noise * heightfield_data
         obs, info = env.reset(test_speed=test_speed, test_angle= test_angle,demo_max_steps = max_steps
                                     ,ground_noise=ground_noise,ground_resolution=0.05, heightfield_data=heightfield_data)  # Gym API
     else:

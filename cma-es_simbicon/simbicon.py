@@ -11,7 +11,7 @@ parser.add_argument("-m", "--mode",type=str, default='walk', help="specify mode 
 parser.add_argument("-f", "--file_path", type=str, default="/home/baran/Bipedal-imitation-rl/locomotion-master(1)/locomotion-master/settings/cma_config_1.20.yml", help="path to config file (yml format)")
 parser.add_argument("-t", "--sim_dt", type=float, default=0.0004, help="simulation timestep")
 parser.add_argument("-i", "--init_index", type=int, default=0, help="starting index of the FSM")
-parser.add_argument("-mi", "--max_iters", type=int, default=10e4, help="iterations of episode")
+parser.add_argument("-mi", "--max_iters", type=int, default=1e4, help="iterations of episode")
 parser.add_argument("-s", "--save_trajectory", action='store_true', default=False, help="whether to save the motion trajectory (needed for imitation learning)")
 parser.add_argument("-sp", "--save_path", type=str, default="", help="save_path of motion trajectory")
 args = parser.parse_args()
@@ -116,14 +116,17 @@ def run_simbicon(mode,file_path, sim_dt, init_index, max_iters, save_trajectory,
 
         if np.abs(theta_torso)>0.9:
             env.close()
+            print("Torso angle is too high")
             return 0,ramp_angle,False, state[15]
         
         elif state[16] > 1.45 + np.tan(ramp_angle*np.pi/180) * state[15]:
             env.close()
+            print("Torso is too high")
             return 0,ramp_angle,False, state[15]
         
         elif state[16] < 0.8 + np.tan(ramp_angle*np.pi/180) * state[15]:
             env.close()
+            print("Torso is too low")
             return 0,ramp_angle,False, state[15]
         
         iters_this_state+=1
@@ -132,12 +135,12 @@ def run_simbicon(mode,file_path, sim_dt, init_index, max_iters, save_trajectory,
             iters_this_state=0
         curr_index = next_ind
 
-        if state[15] > 9.99:
-            return 0, ramp_angle, True, state[15]
+        # if state[15] > 9.99:
+        #     return 0, ramp_angle, True, state[15]
 
     avg_speed = state[15]/(max_iters*env.dt)
     env.close()
-    return avg_speed, ramp_angle, True, state[15]
+    return avg_speed, ramp_angle, True, state[15], rhip_posses, rknee_posses, rankle_posses, lhip_posses, lknee_posses, lankle_posses
 
 # # ROTATION DEMO DATA COLLECTION
 # record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
@@ -199,100 +202,100 @@ def run_simbicon(mode,file_path, sim_dt, init_index, max_iters, save_trajectory,
 # record_data.to_csv("simbicon_velocity_diff.csv", index=False)
 
 
-# NOISY PLANE 0 DEMO DATA COLLECTION
+# # NOISY PLANE 0 DEMO DATA COLLECTION
 
-angle = 0.0
-scenario_mode = 0
-record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
-                                        "resolution","success","max range","trial_no"])
-speeds = np.linspace(0.1,2.0,21)
-trial_no = 1
-total_runs = len(speeds)
-i = 0
-noise_levels = np.arange(1,20)
-total_runs = len(speeds)*len(noise_levels)*4
+# angle = 0.0
+# scenario_mode = 0
+# record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
+#                                         "resolution","success","max range","trial_no"])
+# speeds = np.linspace(0.1,2.0,21)
+# trial_no = 1
+# total_runs = len(speeds)
+# i = 0
+# noise_levels = np.arange(1,20)
+# total_runs = len(speeds)*len(noise_levels)*4
 
-for gamma in [0.25,0.5,1.0,2.0]:
+# for gamma in [0.25,0.5,1.0,2.0]:
 
-    for noise_level in noise_levels:
-        # Scenario count is always 1 (this for loop is just for future use)
-        # Generate heightfield data with noise in the range [-ground_noise, ground_noise]
-        heightfield_data = np.load(f"/home/baran/Bipedal-imitation-rl/noise_planes/plane_{gamma}_0.npy")
-        heightfield_data = heightfield_data * noise_level 
+#     for noise_level in noise_levels:
+#         # Scenario count is always 1 (this for loop is just for future use)
+#         # Generate heightfield data with noise in the range [-ground_noise, ground_noise]
+#         heightfield_data = np.load(f"/home/baran/Bipedal-imitation-rl/noise_planes/plane_{gamma}_0.npy")
+#         heightfield_data = heightfield_data * noise_level 
 
-        for speed in speeds:
+#         for speed in speeds:
 
-            for trial in range(trial_no):
-                file_path = f"/home/baran/Bipedal-imitation-rl/locomotion-master(1)/locomotion-master/settings/cma_config_{speed:.2f}.yml"
+#             for trial in range(trial_no):
+#                 file_path = f"/home/baran/Bipedal-imitation-rl/locomotion-master(1)/locomotion-master/settings/cma_config_{speed:.2f}.yml"
 
-                avg_speed, ramp_angle, success, y_pos = run_simbicon(mode, file_path=file_path, sim_dt=args.sim_dt, init_index=args.init_index,
-                                max_iters=args.max_iters, save_trajectory=args.save_trajectory, ramp_angle=angle, 
-                                ground_resolution=gamma,heightfield_data=heightfield_data)
+#                 avg_speed, ramp_angle, success, y_pos = run_simbicon(mode, file_path=file_path, sim_dt=args.sim_dt, init_index=args.init_index,
+#                                 max_iters=args.max_iters, save_trajectory=args.save_trajectory, ramp_angle=angle, 
+#                                 ground_resolution=gamma,heightfield_data=heightfield_data)
             
-                if success:
-                    record_data = pd.concat([record_data, pd.DataFrame([{"demo type": 'rotation', "cmd speed": speed, "angle": angle,
-                                    "mean speed": avg_speed,"noise level": noise_level,
-                                    "resolution": gamma,"success": success,"max range": y_pos,
-                                    "trial_no": trial}])], ignore_index=True)
+#                 if success:
+#                     record_data = pd.concat([record_data, pd.DataFrame([{"demo type": 'rotation', "cmd speed": speed, "angle": angle,
+#                                     "mean speed": avg_speed,"noise level": noise_level,
+#                                     "resolution": gamma,"success": success,"max range": y_pos,
+#                                     "trial_no": trial}])], ignore_index=True)
 
-                elif trial==trial_no-1:
-                    record_data = pd.concat([record_data, pd.DataFrame([{"demo type": 'rotation', "cmd speed": speed, "angle": angle,
-                                    "mean speed": avg_speed,"noise level": noise_level,
-                                    "resolution": gamma,"success": success,"max range": y_pos,
-                                    "trial_no": trial}])], ignore_index=True)
-
-
-            i+=1
-            if i%100==0:
-                print(f"Completed {i} out of {total_runs} runs")
-print("Dome Noise 0 is done")
-record_data.to_csv("simbicon_noisyplane_0.csv", index=False)
+#                 elif trial==trial_no-1:
+#                     record_data = pd.concat([record_data, pd.DataFrame([{"demo type": 'rotation', "cmd speed": speed, "angle": angle,
+#                                     "mean speed": avg_speed,"noise level": noise_level,
+#                                     "resolution": gamma,"success": success,"max range": y_pos,
+#                                     "trial_no": trial}])], ignore_index=True)
 
 
-# NOISY PLANE 1 DEMO DATA COLLECTION
+#             i+=1
+#             if i%100==0:
+#                 print(f"Completed {i} out of {total_runs} runs")
+# print("Dome Noise 0 is done")
+# record_data.to_csv("simbicon_noisyplane_0.csv", index=False)
 
-angle = 0.0
-scenario_mode = 0
-record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
-                                        "resolution","success","max range","trial_no"])
-speeds = np.linspace(0.1,2.0,21)
-trial_no = 1
-total_runs = len(speeds)
-i = 0
-noise_levels = np.arange(1,20)
-total_runs = len(speeds)*len(noise_levels)*4
 
-for gamma in [0.25,0.5,1.0,2.0]:
+# # NOISY PLANE 1 DEMO DATA COLLECTION
 
-    for noise_level in noise_levels:
-        # Scenario count is always 1 (this for loop is just for future use)
-        # Generate heightfield data with noise in the range [-ground_noise, ground_noise]
-        heightfield_data = np.load(f"/home/baran/Bipedal-imitation-rl/noise_planes/plane_{gamma}_0.npy")
-        heightfield_data = heightfield_data * noise_level 
+# angle = 0.0
+# scenario_mode = 1
+# record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
+#                                         "resolution","success","max range","trial_no"])
+# speeds = np.linspace(0.1,2.0,21)
+# trial_no = 1
+# total_runs = len(speeds)
+# i = 0
+# noise_levels = np.arange(1,20)
+# total_runs = len(speeds)*len(noise_levels)*4
 
-        for speed in speeds:
+# for gamma in [0.25,0.5,1.0,2.0]:
 
-            for trial in range(trial_no):
-                file_path = f"/home/baran/Bipedal-imitation-rl/locomotion-master(1)/locomotion-master/settings/cma_config_{speed:.2f}.yml"
+#     for noise_level in noise_levels:
+#         # Scenario count is always 1 (this for loop is just for future use)
+#         # Generate heightfield data with noise in the range [-ground_noise, ground_noise]
+#         heightfield_data = np.load(f"/home/baran/Bipedal-imitation-rl/noise_planes/plane_{gamma}_0.npy")
+#         heightfield_data = heightfield_data * noise_level 
 
-                avg_speed, ramp_angle, success, y_pos = run_simbicon(mode, file_path=file_path, sim_dt=args.sim_dt, init_index=args.init_index,
-                                max_iters=args.max_iters, save_trajectory=args.save_trajectory, ramp_angle=angle, 
-                                ground_resolution=gamma,heightfield_data=heightfield_data)
+#         for speed in speeds:
+
+#             for trial in range(trial_no):
+#                 file_path = f"/home/baran/Bipedal-imitation-rl/cma-es_simbicon/settings/cma_config_{speed:.2f}.yml"
+
+#                 avg_speed, ramp_angle, success, y_pos = run_simbicon(mode, file_path=file_path, sim_dt=args.sim_dt, init_index=args.init_index,
+#                                 max_iters=args.max_iters, save_trajectory=args.save_trajectory, ramp_angle=angle, 
+#                                 ground_resolution=gamma,heightfield_data=heightfield_data)
                 
-                if success:
-                    record_data = pd.concat([record_data, pd.DataFrame([{"demo type": 'rotation', "cmd speed": speed, "angle": angle,
-                                    "mean speed": avg_speed,"noise level": noise_level,
-                                    "resolution": gamma,"success": success,"max range": y_pos,
-                                    "trial_no": trial}])], ignore_index=True)
+#                 if success:
+#                     record_data = pd.concat([record_data, pd.DataFrame([{"demo type": 'rotation', "cmd speed": speed, "angle": angle,
+#                                     "mean speed": avg_speed,"noise level": noise_level,
+#                                     "resolution": gamma,"success": success,"max range": y_pos,
+#                                     "trial_no": trial}])], ignore_index=True)
 
-                elif trial==trial_no-1:
-                    record_data = pd.concat([record_data, pd.DataFrame([{"demo type": 'rotation', "cmd speed": speed, "angle": angle,
-                                    "mean speed": avg_speed,"noise level": noise_level,
-                                    "resolution": gamma,"success": success,"max range": y_pos,
-                                    "trial_no": trial}])], ignore_index=True)
+#                 elif trial==trial_no-1:
+#                     record_data = pd.concat([record_data, pd.DataFrame([{"demo type": 'rotation', "cmd speed": speed, "angle": angle,
+#                                     "mean speed": avg_speed,"noise level": noise_level,
+#                                     "resolution": gamma,"success": success,"max range": y_pos,
+#                                     "trial_no": trial}])], ignore_index=True)
 
-            i+=1
-            if i%100==0:
-                print(f"Completed {i} out of {total_runs} runs")
-print(f"Demo Noise 1 is done")
-record_data.to_csv("simbicon_noisyplane_1.csv", index=False)
+#             i+=1
+#             if i%100==0:
+#                 print(f"Completed {i} out of {total_runs} runs")
+# print(f"Demo Noise 1 is done")
+# record_data.to_csv("simbicon_noisyplane_1.csv", index=False)
