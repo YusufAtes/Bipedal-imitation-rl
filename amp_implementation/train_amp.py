@@ -44,7 +44,7 @@ env = BipedEnv()
 # 2) LOAD MOTION DATASET (.npy)
 # ============================================================
 np_data = np.load(
-    "/home/baran/Bipedal-imitation-rl/gait time series data/window_data.npy"
+    "gait time series data/window_data.npy"
 ).astype(np.float32)  # (2262, 10, 6)
 N, T, J = np_data.shape
 assert (T, J) == (50, 6), f"Expected (50,6), got {(T, J)}"
@@ -155,6 +155,17 @@ print({k: cfg_agent.get(k, None) for k in [
     "use_amp_states_as_observations"
 ]})
 
+# --- Experiment configuration for built-in checkpointing ---
+cfg_agent["experiment"] = {
+    "directory": "amp_runs_15m",            # experiment's parent directory
+    "experiment_name": "amp_trial0",        # experiment name
+    "write_interval": "auto",               # TensorBoard writing interval (timesteps)
+    "checkpoint_interval": 500_000,       # interval for checkpoints (timesteps)
+    "store_separately": False,              # whether to store checkpoints separately
+    "wandb": False,                         # whether to use Weights & Biases
+    "wandb_kwargs": {}                      # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
+}
+
 
 
 
@@ -182,52 +193,19 @@ agent = AMP(
 )
 
 from skrl.trainers.torch import SequentialTrainer
-from torch.utils.tensorboard import SummaryWriter
 import os
-import csv
 import torch
 
 # ============================================================
-# 1. Output directories
-# ============================================================
-output_dir = "amp_runs_15m"
-os.makedirs(output_dir, exist_ok=True)
-
-checkpoints_dir = os.path.join(output_dir, "checkpoints")
-os.makedirs(checkpoints_dir, exist_ok=True)
-
-tensorboard_dir = os.path.join(output_dir, "tensorboard")
-os.makedirs(tensorboard_dir, exist_ok=True)
-
-csv_log_path = os.path.join(output_dir, "train_log.csv")
-
-# # ============================================================
-# # 2. CSV + TensorBoard setup
-# # ============================================================
-# csv_file = open(csv_log_path, mode='w', newline='')
-# csv_writer = csv.writer(csv_file)
-# csv_writer.writerow(['timestep', 'episode', 'reward'])
-
-# writer = SummaryWriter(log_dir=tensorboard_dir)
-
-# ============================================================
-# 3. Checkpoint saving is handled by CheckpointCallback class below
-# ============================================================
-
-# ============================================================
-# 4. Configure StepTrainer (no 'log_dir' argument!)
+# 1. Configure trainer
 # ============================================================
 max_steps = 15_000_000
-cfg_trainer = {
-    "timesteps": max_steps,
-    "headless": False,
-    "print_every": 10_000,
-}
 cfg = {
-    "timesteps": 15_000_000, 
-    "headless": False,
-    "print_every": 10_000
+    "timesteps": max_steps, 
+    "headless": True,
+    "print_every": 100_000
 }
+
 trainer = SequentialTrainer(
     env=env,
     agents=agent,
@@ -235,33 +213,12 @@ trainer = SequentialTrainer(
 )
 
 # ============================================================
-# 5. Training with callbacks
+# 2. Start training (checkpointing handled by agent config)
 # ============================================================
-checkpoint_steps = 500_000
-
-# Custom callback for saving checkpoints
-class CheckpointCallback:
-    def __init__(self, agent, checkpoint_steps):
-        self.agent = agent
-        self.checkpoint_steps = checkpoint_steps
-    
-    def __call__(self, trainer):
-        if trainer.total_timesteps > 0 and trainer.total_timesteps % self.checkpoint_steps == 0:
-            ckpt_k = trainer.total_timesteps // 1000
-            torch.save(self.agent.models["policy"].state_dict(), os.path.join(checkpoints_dir, f"policy_{ckpt_k}k.pt"))
-            torch.save(self.agent.models["value"].state_dict(), os.path.join(checkpoints_dir, f"value_{ckpt_k}k.pt"))
-            torch.save(self.agent.models["discriminator"].state_dict(), os.path.join(checkpoints_dir, f"discriminator_{ckpt_k}k.pt"))
-            print(f"[Checkpoint] Saved weights at step {trainer.total_timesteps:,}")
-
-callback = CheckpointCallback(agent, checkpoint_steps)
-trainer.callbacks = [callback]
-
 print(f"Starting training for {max_steps:,} steps...")
+print("Checkpoints will be saved every 500,000 steps to amp_runs_15m/amp_trial0/")
 trainer.train()
 
-# ============================================================
-# 6. Clean up
-# ============================================================
-print(f"Training completed. Outputs in: {output_dir}")
+print("Training completed!")
 
 
