@@ -158,7 +158,7 @@ agent = AMP(
     # DO NOT PASS collect_observation here! This is what was overriding your RL state.
     # collect_observation=env.collect_observation,
 )
-
+agent.load("/home/baran/Bipedal-imitation-rl/agent_1500000.pt")
 from skrl.trainers.torch import SequentialTrainer
 import os
 import torch
@@ -168,10 +168,14 @@ import torch
 # ============================================================
 max_steps = 15_000_000
 cfg = {
-    "timesteps": max_steps, 
-    "headless": True,
-    "print_every": 100_000
-}
+        "timesteps": max_steps,
+        "headless": True,
+        "print_every": 100_000,
+        # === UPDATED tqdm_kwargs ===
+        # Set both miniters and a long mininterval
+        "tqdm_kwargs": {"miniters": 2000, "mininterval": 10.0} 
+        # === END UPDATE ===
+    }
 
 trainer = SequentialTrainer(
     env=env,

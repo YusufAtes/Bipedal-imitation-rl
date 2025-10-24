@@ -254,7 +254,7 @@ if __name__ == "__main__":
     cfg = {
         "timesteps": max_steps,
         "headless": True,
-        "print_every": 100_000
+        "print_every": 100_000,
     }
 
     trainer = SequentialTrainer(
