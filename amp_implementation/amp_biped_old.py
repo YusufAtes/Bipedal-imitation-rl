@@ -46,8 +46,12 @@ class BipedEnv(gym.Env):
         self.max_steps = int(3*(1/self.dt))
         self.action_space = spaces.Box(low=-1, high=1, shape=(7,), dtype=np.float32)
         self.observation_space = spaces.Box(low=-100, high=100, shape=(56,), dtype=np.float32)
+
+        # === FIX: Change AMP observation space to match data (10 steps * 6 joints = 60) ===
         self.amp_observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(300,), dtype=np.float32)
-        self.amp_q_hist = torch.zeros(1, 50, 6, dtype=torch.float32, device=self.device)
+        self.amp_q_hist = torch.zeros(1, 50, 6, dtype=torch.float32, device=self.device) # 50 history, 6 joints
+        # === END FIX ===
+        
         self.num_agents = 1
 
         self.t = 0
@@ -68,19 +72,17 @@ class BipedEnv(gym.Env):
         self.right_swing = False
         self.left_swing = False
 
-        np_data = np.load(
-            rf"/home/baran/Bipedal-imitation-rl/gait time series data/window_data.npy"
-        ).astype(np.float32)  # (2262, 10, 6)
-        N, T, J = np_data.shape
-        assert (T, J) == (50, 6), f"Expected (50,6), got {(T, J)}"
-        K = T * J
-
-        REF_X = torch.from_numpy(np_data.reshape(N, K)).to(self.device)  # (2262, 60)
-        REF_MEAN = REF_X.mean(dim=0, keepdim=True)
-        REF_STD = REF_X.std(dim=0, keepdim=True).clamp_min(1e-6)
-        REF_X = (REF_X - REF_MEAN) / REF_STD
-        self.amp_mean = REF_MEAN
-        self.amp_std = REF_STD
+        # === NOTE: This logic is in train_amp_old.py, but reflects the K=60 change ===
+        # np_data = np.load(
+        #     rf"/home/baran/Bipedal-imitation-rl/gait time series data/window_data.npy"
+        # ).astype(np.float32)  # (2262, 10, 6)
+        # N, T, J = np_data.shape
+        # assert (T, J) == (10, 6)
+        # K = T * J # K = 60
+        # ...
+        # self.amp_mean = REF_MEAN (shape 60)
+        # self.amp_std = REF_STD (shape 60)
+        # === END NOTE ===
 
     def reset(self,seed=None,test_speed = None, test_angle = None,demo_max_steps = None, 
               ground_noise = None, ground_resolution = None,heightfield_data=[None],options= None):
@@ -212,7 +214,7 @@ class BipedEnv(gym.Env):
         truncated_tensor = torch.tensor([truncated], dtype=torch.bool, device=self.device).unsqueeze(-1)
 
         # 3) build AMP obs for discriminator and store it in info
-        amp_obs = self.collect_observation()                  # torch (num_envs, 300) on env.device
+        amp_obs = self.collect_observation()                  # torch (num_envs, 60) on env.device
         info = {"amp_obs": amp_obs}
         return state_tensor, reward_tensor, done_tensor, truncated_tensor, info
 
@@ -223,13 +225,13 @@ class BipedEnv(gym.Env):
         # self.imitation_weight = 1.0 -  alpha_coeff
         self.gait_weight = 1.0
 
-        self.imitation_weight_hip_pos = 0.75
-        self.imitation_weight_knee_pos = 0.75
-        self.imitation_weight_ankle_pos = 0.25
+        # self.imitation_weight_hip_pos = 0.75
+        # self.imitation_weight_knee_pos = 0.75
+        # self.imitation_weight_ankle_pos = 0.25
 
-        self.imitation_weight_hip_vel = 0.15
-        self.imitation_weight_knee_vel = 0.15
-        self.imitation_weight_ankle_vel = 0.1
+        # self.imitation_weight_hip_vel = 0.15
+        # self.imitation_weight_knee_vel = 0.15
+        # self.imitation_weight_ankle_vel = 0.1
 
         # 10 M steps is usually 35k episodes
         self.alive_weight = 0.5 * self.gait_weight
@@ -758,9 +760,11 @@ class BipedEnv(gym.Env):
         return self.taken_step_counter
 
     def collect_observation(self):
-        # flatten (num_envs, 50, 6) -> (num_envs, 300)
-        x = self.amp_q_hist.reshape(self.num_envs, -1)
-        # optional normalization if you set env.amp_mean / env.amp_std from train script
-        if hasattr(self, "amp_mean") and hasattr(self, "amp_std"):
-            x = (x - self.amp_mean) / self.amp_std
-        return x.to(self.device)
+        # hist: (1, 50, 6)  -> (1, 300)
+        x = self.amp_q_hist.reshape(1, -1)                      # (1, 300)
+        # normalize with dataset stats computed in __init__
+        x = (x - self.amp_mean) / self.amp_std
+        # clip to stop outliers from exploding the discriminator
+        x = torch.clamp(x, -5.0, 5.0)
+        return x.to(self.device).float()
+

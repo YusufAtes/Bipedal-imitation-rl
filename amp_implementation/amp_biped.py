@@ -76,6 +76,7 @@ class BipedEnv(gym.Env):
         self.left_swing = False
 
         np_data = np.load(rf"/home/baran/Bipedal-imitation-rl/gait time series data/window_data.npy").astype(np.float32)
+        np_data = np.nan_to_num(np_data, nan=0.0, posinf=0.0, neginf=0.0)   # ← add this
 
         N, T, J = np_data.shape
         assert (T, J) == (50, 6), f"Expected (50,6), got {(T, J)}"

@@ -1,3 +1,4 @@
+
 from skrl.agents.torch.amp import AMP, AMP_DEFAULT_CONFIG
 from amp_biped_old import BipedEnv
 from skrl.memories.torch import RandomMemory
@@ -9,22 +10,31 @@ import numpy as np
 
 env = BipedEnv()
 
+savefolder = "amp_trial3"
+max_steps = 3_000_000
+save_interval = 500_000
 # ============================================================
 # 2) LOAD MOTION DATASET (.npy)
 # ============================================================
-np_data = np.load(
-    "gait time series data/window_data.npy"
-).astype(np.float32)  # (2262, 10, 6)
+np_data = np.load("gait time series data/window_data.npy").astype(np.float32)
+assert np.isfinite(np_data).all(), "NaNs in motion dataset"
 N, T, J = np_data.shape
 assert (T, J) == (50, 6), f"Expected (50,6), got {(T, J)}"
 K = T * J
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-REF_X = torch.from_numpy(np_data.reshape(N, K)).to(device)  # (2262, 60)
+device = env.device
+# use `device` for REF_X, models, memories
+
+REF_X = torch.from_numpy(np_data.reshape(N, K)).to(device)  # (2262, 300)
 REF_MEAN = REF_X.mean(dim=0, keepdim=True)
 REF_STD = REF_X.std(dim=0, keepdim=True).clamp_min(1e-6)
 REF_X = (REF_X - REF_MEAN) / REF_STD
+
+# Pass the mean and std to the env for normalization of live observations
+# This is crucial for the discriminator
+env.amp_mean = REF_MEAN
+env.amp_std = REF_STD
 
 # sample random AMP reference windows when AMP requests them
 def collect_reference_motions(num_samples: int) -> torch.Tensor:
@@ -34,30 +44,23 @@ def collect_reference_motions(num_samples: int) -> torch.Tensor:
 
 from skrl.memories.torch import RandomMemory
 
-# REF_X: (N, 300) normalized tensor already on device
 motion_dataset = RandomMemory(memory_size=REF_X.shape[0], num_envs=1, device=env.device)
-motion_dataset.create_tensor(name="states", size=300, dtype=torch.float32)
+motion_dataset.create_tensor(name="states",     size=K, dtype=torch.float32)
+motion_dataset.create_tensor(name="amp_states", size=K, dtype=torch.float32)
 
-for chunk in REF_X.split(2048, dim=0):
-    motion_dataset.add_samples(states=chunk)
+for i in range(REF_X.shape[0]):
+    row = REF_X[i].unsqueeze(0)
+    motion_dataset.add_samples(states=row)
+    motion_dataset.add_samples(amp_states=row)
 
 # ============================================================
 # 3) MEMORIES
 # ============================================================
 # On-policy rollout memory: used by PPO/AMP for trajectory storage
 # Must match env.num_envs and reside on the same device
-memory = RandomMemory(memory_size=2048, num_envs=1, device=env.device)
 
-# Replay buffer of policy-generated AMP observations:
-# used to stabilize discriminator training
-reply_buffer = RandomMemory(memory_size=50000, num_envs=1, device=env.device)
-reply_buffer.create_tensor(name="amp_states", size=K, dtype=torch.float32)
-
-# Optional helper to push to buffer each step:
-# (Call this in your training loop after collecting AMP obs)
-def push_to_reply_buffer(amp_states: torch.Tensor):
-    reply_buffer.add_samples(amp_states=amp_states.detach())
-
+reply_buffer = RandomMemory(memory_size=50_000, num_envs=1, device=env.device)
+reply_buffer.create_tensor(name="states", size=300, dtype=torch.float32)  # <-- not "amp_states"
 
 # ============================================================
 # 4) MODELS
@@ -65,7 +68,9 @@ def push_to_reply_buffer(amp_states: torch.Tensor):
 models = {
     "policy":        PolicyMLP(observation_space=56, action_space=7, device=device),    
     "value":         ValueMLP(observation_space=56, action_space=None,device=device),
-    "discriminator": DiscriminatorMLP(observation_space=300,action_space=None, device=device),  # <- was 60
+    # === FIX: Set discriminator input to K (300) ===
+    "discriminator": DiscriminatorMLP(observation_space=K, action_space=None, device=device),
+    # === END FIX ===
 }
 
 # --- Sanity checks (run before agent = AMP(...)) ---
@@ -75,7 +80,10 @@ assert hasattr(obs, "shape") and obs.shape == (1, 56), f"reset returned {obs.sha
 
 amp_obs = env.collect_observation()
 print("AMP obs from collect_observation:", amp_obs.shape)               # must be (num_envs, 300)
-assert amp_obs.shape == (getattr(env, "num_envs", 1), 300), f"got {amp_obs.shape}"
+# === FIX: Assert the correct shape K (60) ===
+assert amp_obs.shape == (getattr(env, "num_envs", 1), K), f"got {amp_obs.shape}, expected (1, {K})"
+# === END FIX ===
+
 
 # Try one policy forward with a fake batch of RL obs
 import torch
@@ -88,77 +96,118 @@ print("Policy forward OK:", m.shape, ls.shape)  # (1,7), (7,)
 # ============================================================
 # 5) AGENT CONFIGURATION
 # ============================================================
+K = 300                     # 50 x 6 AMP observation
+NUM_ENVS = 1                # your env is single-instance
+MOTION_N = 5000             # you said 5k datapoints
+
+# ==== 1) On-policy memory MUST match rollouts ====
 cfg_agent = AMP_DEFAULT_CONFIG.copy()
 
-# --- make sure policy uses the 56-D RL observation, not AMP (300-D) ---
-for k in [
-    "use_amp_observation_as_state",
-    "use_amp_observation_as_states",
-    "amp_observation_as_state",
-    "observe_amp_states",
-    "use_amp_states_as_observations"
-]:
-    if k in cfg_agent:
-        cfg_agent[k] = False
 
-# --- AMP discriminator & dataset sampling ---
-cfg_agent["discriminator_batch_size"] = 1024    # policy vs. reference mix
-cfg_agent["amp_batch_size"] = 1024              # balanced for N≈2262
-cfg_agent["discriminator_updates"] = 2          # 2 discriminator steps / iteration
+cfg_agent.update({
+    # rollout / update cadence
+    "rollouts": 64,                 # collect 64 steps then update
+    "learning_epochs": 5,           # PPO-style passes per update
+    "mini_batches": 4,              # splits of the on-policy batch
 
-# --- Regularization (prevents over-powerful discriminator) ---
+    # optimization
+    "learning_rate": 1e-4,          # AMP default is conservative; keep it
+    "grad_norm_clip": 1.0,          # prevent spikes
+
+    # style vs task
+    "style_reward_weight": 0.25,     
+    "task_reward_weight": 1.0,      
+
+    # discriminator training
+    "discriminator_batch_size": 512,           # logits on (on-policy + replay) vs motion
+    "amp_batch_size": 512,                     # new motion windows per update
+    "discriminator_updates": 1,                # one D step per PPO step (your class uses this key)
+
+    # discriminator regularization (good defaults)
+    "discriminator_logit_regularization_scale": 0.05,
+    "discriminator_gradient_penalty_scale": 5.0,
+    "discriminator_weight_decay_scale": 1e-4,
+
+    # misc
+    "random_timesteps": 0,
+    "learning_starts": 0,
+    "mixed_precision": False,                  # make debugging simpler & deterministic
+
+    # logging
+    "experiment": {
+        "directory": "amp_runs_15m",
+        "experiment_name": savefolder,
+        "write_interval": "auto",
+        "checkpoint_interval": save_interval,
+        "store_separately": False,
+        "wandb": False,
+        "wandb_kwargs": {}
+    }
+})
+
+cfg_agent["entropy_loss_scale"] = 0.001   # small but non-zero
+cfg_agent["grad_norm_clip"] = 1.0
+
+
+# Keep batches modest; too big => too strong D early on
+cfg_agent["discriminator_batch_size"] = 256
+cfg_agent["amp_batch_size"] = 256
+cfg_agent["discriminator_updates"] = 1
+
+# Regularization
 cfg_agent["discriminator_logit_regularization_scale"] = 0.05
-cfg_agent["discriminator_gradient_penalty_scale"] = 5.0
-cfg_agent["discriminator_weight_decay_scale"] = 1e-4
+cfg_agent["discriminator_gradient_penalty_scale"] = 1.0   # was 5.0, lower it
+cfg_agent["discriminator_weight_decay_scale"] = 0.0
 
-# --- Reward weighting (style vs. task) ---
-cfg_agent["style_reward_weight"] = 1.0          # strong imitation term
-cfg_agent["task_reward_weight"]  = 0.3          # forward-speed / stability shaping
 
-# --- optional debug print to confirm which key actually exists in your skrl version ---
-print({k: cfg_agent.get(k, None) for k in [
-    "use_amp_observation_as_state",
-    "use_amp_observation_as_states",
-    "amp_observation_as_state",
-    "observe_amp_states",
-    "use_amp_states_as_observations"
-]})
 
-# --- Experiment configuration for built-in checkpointing ---
-cfg_agent["experiment"] = {
-    "directory": "amp_runs_15m",            # experiment's parent directory
-    "experiment_name": "amp_trial0",        # experiment name
-    "write_interval": "auto",               # TensorBoard writing interval (timesteps)
-    "checkpoint_interval": 500_000,       # interval for checkpoints (timesteps)
-    "store_separately": False,              # whether to store checkpoints separately
-    "wandb": False,                         # whether to use Weights & Biases
-    "wandb_kwargs": {}                      # wandb kwargs (see https://docs.wandb.ai/ref/python/init)
-}
-
+memory = RandomMemory(memory_size=cfg_agent["rollouts"], num_envs=1, device=env.device)
 
 # ============================================================
 # 6) AGENT INSTANTIATION
 # ============================================================
 # === agent instantiation ===
+# before agent = AMP(...)
+
 agent = AMP(
     models=models,
     memory=memory,
     cfg=cfg_agent,
-    observation_space=env.observation_space,      # (56,)
-    action_space=env.action_space,                # (7,)
+    observation_space=env.observation_space,
+    action_space=env.action_space,
     device=env.device,
-    amp_observation_space=env.amp_observation_space,  # (300,)
+    amp_observation_space=env.amp_observation_space,
 
-    # IMPORTANT:
-    motion_dataset=motion_dataset,   # see B) below
-    reply_buffer=reply_buffer,
+    motion_dataset=motion_dataset,
+    reply_buffer=reply_buffer,     # <- RESTORE, plain empty buffer is fine
 
     collect_reference_motions=collect_reference_motions,
-
-    # DO NOT PASS collect_observation here! This is what was overriding your RL state.
-    # collect_observation=env.collect_observation,
 )
-agent.load("/home/baran/Bipedal-imitation-rl/agent_1500000.pt")
+
+# ✅ ADD THIS: sanity check right after init
+for name, p in agent.policy.named_parameters():
+    if not torch.isfinite(p).all():
+        raise RuntimeError(f"Policy param {name} is non-finite right after init!")
+
+# Right before training, verify a sample is finite
+batch = motion_dataset.sample(names=["amp_states"], batch_size=256)
+# assert torch.isfinite(batch).all(), "NaNs in motion_dataset amp_states!"
+print("-------------------------------- ")
+print(batch)
+print("--------------------------------")
+
+print("Motion dataset tensors:", motion_dataset.tensors)   # must contain "states" -> (N, 300)
+print("Replay buffer tensors:", reply_buffer.tensors)      # must contain "states" -> (0, 300) initially
+print("AMP memory tensors:", agent.memory.tensors)         # must contain "amp_states" -> (rollouts, 300)
+
+# After the first update, replay size should grow:
+# (you can put this print inside a hook after a few steps)
+print("Replay len (after 1st update):", len(reply_buffer))
+
+
+
+
+
 from skrl.trainers.torch import SequentialTrainer
 import os
 import torch
@@ -166,14 +215,14 @@ import torch
 # ============================================================
 # 1. Configure trainer
 # ============================================================
-max_steps = 15_000_000
 cfg = {
         "timesteps": max_steps,
         "headless": True,
-        "print_every": 100_000,
-        # === UPDATED tqdm_kwargs ===
-        # Set both miniters and a long mininterval
-        "tqdm_kwargs": {"miniters": 2000, "mininterval": 10.0} 
+        # "print_every": 100_000,
+        # # === UPDATED tqdm_kwargs ===
+        # # Set both miniters and a long mininterval
+        # "tqdm_kwargs": {"miniters": 2000, "mininterval": 10.0},
+        "experiment_name": savefolder,
         # === END UPDATE ===
     }
 
@@ -181,15 +230,14 @@ trainer = SequentialTrainer(
     env=env,
     agents=agent,
     cfg=cfg
-)
+)   
 
 # ============================================================
 # 2. Start training (checkpointing handled by agent config)
-# ============================================================
+#============================================================
 print(f"Starting training for {max_steps:,} steps...")
-print("Checkpoints will be saved every 500,000 steps to amp_runs_15m/amp_trial0/")
+print(f"AMP observation dimension K = {K}")
+print(f"Checkpoints will be saved every {save_interval:,} steps to amp_runs_15m/{savefolder}/")
 trainer.train()
 
-print("Training completed!")
-
-
+# print("Training completed!")
