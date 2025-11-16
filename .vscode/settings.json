@@ -1,0 +1,26 @@
+{
+  "terminal.integrated.profiles.windows": {
+    "PowerShell": {
+      "source": "PowerShell",
+      "icon": "terminal-powershell"
+    },
+    "Git Bash": {
+      "path": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "icon": "terminal-bash"
+    },
+    "Conda": {
+      "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "args": [
+        "-NoExit",
+        "-Command",
+        "& 'C:\\Users\\bates\\anaconda3\\Scripts\\conda.exe' shell.powershell hook | Out-String | Invoke-Expression"
+      ],
+      "icon": "terminal",
+      "env": {}
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
+}
+
+
+
