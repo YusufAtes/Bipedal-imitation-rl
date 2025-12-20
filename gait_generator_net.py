@@ -3,22 +3,21 @@ import torch.nn as nn
 
 
 class SimpleFCNN(nn.Module):
-    """Original simple MLP - kept for backward compatibility with saved models."""
     def __init__(self, input_size=3, output_size=204, hidden_size=512):
         super(SimpleFCNN, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, output_size)
-        self.relu = nn.ReLU()
-
+        # Increased depth slightly to help map the non-linear relationship at low speeds
+        self.net = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.LeakyReLU(0.1),  # LeakyReLU often trains better for signal regression
+            nn.Linear(hidden_size, hidden_size),
+            nn.LeakyReLU(0.1),
+            nn.Linear(hidden_size, hidden_size), # Added one more layer for capacity
+            nn.LeakyReLU(0.1),
+            nn.Linear(hidden_size, output_size)
+        )
+        
     def forward(self, x):
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.fc2(x)
-        x = self.relu(x)
-        x = self.fc3(x)
-        return x
-
+        return self.net(x)
 
 class ResidualBlock(nn.Module):
     """Residual block with layer normalization for stable training."""

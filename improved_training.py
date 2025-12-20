@@ -85,7 +85,7 @@ class EarlyStopping:
         return self.should_stop
 
 
-def create_dataloaders(input_path, output_path, batch_size=64, val_split=0.1, test_split=0.05):
+def create_dataloaders(input_path, output_path, batch_size=64, val_split=0.15, test_split=0.00):
     """Create train/val/test dataloaders."""
     inputs = np.load(input_path).astype(np.float32)
     outputs = np.load(output_path).astype(np.float32)
@@ -582,14 +582,14 @@ if __name__ == "__main__":
         output_path="gait reference fft5.00/newnormalized_output_fft_constants.npy",
         results_dir="hyperparameter_results",
         # Search space
-        model_classes=[SimpleFCNN, GaitFFTPredictor],
+        model_classes=[GaitFFTPredictor],
         batch_sizes=[32, 64],
-        hidden_sizes=[256, 512],
+        hidden_sizes=[512],
         learning_rates=[1e-3, 3e-4],
         # Training settings
         weight_decay=1e-5,
         num_epochs=8000,
-        patience=500,
+        patience=200,
     )
     
     # Print top 5 results

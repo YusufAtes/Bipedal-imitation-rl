@@ -1,3 +1,6 @@
+(base) PS C:\Users\yusuf\Bipedal-imitation-rl> python improved_training.py                                                                  
+Using device: cpu
+
 ================================================================================
 HYPERPARAMETER TUNING
 ================================================================================
@@ -18,25 +21,18 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    119,244
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 0.103997 | Val: 0.089847 | LR: 1.00e-03 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.032209 | Val: 0.031564 | LR: 1.00e-03 | Time: 10.7s
-  Epoch  400/8000 | Train: 0.029496 | Val: 0.031160 | LR: 1.00e-03 | Time: 20.8s
-  Epoch  600/8000 | Train: 0.028266 | Val: 0.029416 | LR: 1.00e-03 | Time: 30.8s
-  Epoch  800/8000 | Train: 0.027111 | Val: 0.029241 | LR: 1.00e-03 | Time: 40.6s
-  Epoch 1000/8000 | Train: 0.026652 | Val: 0.028509 | LR: 1.00e-03 | Time: 50.6s
-  Epoch 1200/8000 | Train: 0.025708 | Val: 0.028333 | LR: 1.00e-03 | Time: 61.1s
-  Epoch 1400/8000 | Train: 0.025440 | Val: 0.028984 | LR: 1.00e-03 | Time: 71.5s
-  Epoch 1600/8000 | Train: 0.024907 | Val: 0.027469 | LR: 1.00e-03 | Time: 83.6s
-  Epoch 1800/8000 | Train: 0.024308 | Val: 0.027632 | LR: 1.00e-03 | Time: 95.9s
-  Epoch 2000/8000 | Train: 0.023684 | Val: 0.027800 | LR: 1.00e-03 | Time: 107.1s
-  Epoch 2200/8000 | Train: 0.024019 | Val: 0.027566 | LR: 1.00e-03 | Time: 118.6s
-  Epoch 2400/8000 | Train: 0.023404 | Val: 0.029405 | LR: 1.00e-03 | Time: 128.7s
-  Epoch 2600/8000 | Train: 0.021932 | Val: 0.026699 | LR: 5.00e-04 | Time: 139.3s
-  Epoch 2800/8000 | Train: 0.021590 | Val: 0.026699 | LR: 5.00e-04 | Time: 149.8s
-  Epoch 3000/8000 | Train: 0.021402 | Val: 0.026979 | LR: 5.00e-04 | Time: 160.3s
-  Epoch 3200/8000 | Train: 0.020779 | Val: 0.026440 | LR: 2.50e-04 | Time: 171.2s
-  Early stopping at epoch 3310
-  Best val loss: 0.026017 @ epoch 2810
+  Epoch    1/8000 | Train: 0.101313 | Val: 0.085480 | LR: 1.00e-03 | Time: 0.1s
+  Epoch  200/8000 | Train: 0.031742 | Val: 0.030329 | LR: 1.00e-03 | Time: 11.5s
+  Epoch  400/8000 | Train: 0.029376 | Val: 0.028507 | LR: 1.00e-03 | Time: 23.7s
+  Epoch  600/8000 | Train: 0.028019 | Val: 0.027949 | LR: 1.00e-03 | Time: 36.9s
+  Epoch  800/8000 | Train: 0.026940 | Val: 0.027660 | LR: 1.00e-03 | Time: 51.3s
+  Epoch 1000/8000 | Train: 0.025947 | Val: 0.027109 | LR: 1.00e-03 | Time: 65.7s
+  Epoch 1200/8000 | Train: 0.025105 | Val: 0.027002 | LR: 5.00e-04 | Time: 81.0s
+  Epoch 1400/8000 | Train: 0.024758 | Val: 0.027143 | LR: 5.00e-04 | Time: 95.0s
+  Epoch 1600/8000 | Train: 0.024110 | Val: 0.026282 | LR: 2.50e-04 | Time: 109.8s
+  Epoch 1800/8000 | Train: 0.023572 | Val: 0.026781 | LR: 1.25e-04 | Time: 124.8s
+  Early stopping at epoch 1856
+  Best val loss: 0.026272 @ epoch 1356
   ✓ New best model saved: best_model_SimpleFCNN_hs256_lr0.001_bs32.pth
 
 [2/16] Training Configuration:
@@ -48,29 +44,21 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    119,244
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 0.117205 | Val: 0.096039 | LR: 3.00e-04 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.035089 | Val: 0.033710 | LR: 3.00e-04 | Time: 10.4s
-  Epoch  400/8000 | Train: 0.031847 | Val: 0.032068 | LR: 3.00e-04 | Time: 20.5s
-  Epoch  600/8000 | Train: 0.031053 | Val: 0.031072 | LR: 3.00e-04 | Time: 30.4s
-  Epoch  800/8000 | Train: 0.030258 | Val: 0.030917 | LR: 3.00e-04 | Time: 40.6s
-  Epoch 1000/8000 | Train: 0.029843 | Val: 0.030330 | LR: 3.00e-04 | Time: 50.8s
-  Epoch 1200/8000 | Train: 0.029328 | Val: 0.030170 | LR: 3.00e-04 | Time: 61.1s
-  Epoch 1400/8000 | Train: 0.028965 | Val: 0.030568 | LR: 3.00e-04 | Time: 72.5s
-  Epoch 1600/8000 | Train: 0.028657 | Val: 0.029895 | LR: 3.00e-04 | Time: 83.7s
-  Epoch 1800/8000 | Train: 0.028108 | Val: 0.029438 | LR: 3.00e-04 | Time: 94.3s
-  Epoch 2000/8000 | Train: 0.027669 | Val: 0.029417 | LR: 3.00e-04 | Time: 105.6s
-  Epoch 2200/8000 | Train: 0.027525 | Val: 0.029177 | LR: 3.00e-04 | Time: 116.3s
-  Epoch 2400/8000 | Train: 0.027204 | Val: 0.029391 | LR: 3.00e-04 | Time: 127.2s
-  Epoch 2600/8000 | Train: 0.026929 | Val: 0.028698 | LR: 3.00e-04 | Time: 139.0s
-  Epoch 2800/8000 | Train: 0.026336 | Val: 0.028631 | LR: 3.00e-04 | Time: 150.3s
-  Epoch 3000/8000 | Train: 0.026289 | Val: 0.028585 | LR: 3.00e-04 | Time: 162.8s
-  Epoch 3200/8000 | Train: 0.025647 | Val: 0.028188 | LR: 1.50e-04 | Time: 173.7s
-  Epoch 3400/8000 | Train: 0.025528 | Val: 0.028078 | LR: 1.50e-04 | Time: 184.9s
-  Epoch 3600/8000 | Train: 0.025155 | Val: 0.028112 | LR: 7.50e-05 | Time: 195.9s
-  Epoch 3800/8000 | Train: 0.025015 | Val: 0.028005 | LR: 3.75e-05 | Time: 207.2s
-  Epoch 4000/8000 | Train: 0.024884 | Val: 0.027979 | LR: 1.87e-05 | Time: 218.7s
-  Early stopping at epoch 4081
-  Best val loss: 0.027907 @ epoch 3581
+  Epoch    1/8000 | Train: 0.114665 | Val: 0.092908 | LR: 3.00e-04 | Time: 0.1s
+  Epoch  200/8000 | Train: 0.034367 | Val: 0.032509 | LR: 3.00e-04 | Time: 14.0s
+  Epoch  400/8000 | Train: 0.032077 | Val: 0.030724 | LR: 3.00e-04 | Time: 27.2s
+  Epoch  600/8000 | Train: 0.030614 | Val: 0.029561 | LR: 3.00e-04 | Time: 39.9s
+  Epoch  800/8000 | Train: 0.030085 | Val: 0.029286 | LR: 3.00e-04 | Time: 53.2s
+  Epoch 1000/8000 | Train: 0.029203 | Val: 0.028390 | LR: 3.00e-04 | Time: 65.6s
+  Epoch 1200/8000 | Train: 0.028635 | Val: 0.029037 | LR: 3.00e-04 | Time: 77.9s
+  Epoch 1400/8000 | Train: 0.028471 | Val: 0.028578 | LR: 3.00e-04 | Time: 90.3s
+  Epoch 1600/8000 | Train: 0.028111 | Val: 0.027873 | LR: 3.00e-04 | Time: 102.7s
+  Epoch 1800/8000 | Train: 0.027583 | Val: 0.028129 | LR: 3.00e-04 | Time: 115.1s
+  Epoch 2000/8000 | Train: 0.027376 | Val: 0.027450 | LR: 3.00e-04 | Time: 128.6s
+  Epoch 2200/8000 | Train: 0.026576 | Val: 0.027519 | LR: 1.50e-04 | Time: 142.6s
+  Epoch 2400/8000 | Train: 0.026265 | Val: 0.027457 | LR: 7.50e-05 | Time: 155.4s
+  Early stopping at epoch 2400
+  Best val loss: 0.027199 @ epoch 1900
 
 [3/16] Training Configuration:
 ------------------------------------------------------------
@@ -81,21 +69,17 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    369,356
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 0.096645 | Val: 0.081676 | LR: 1.00e-03 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.029760 | Val: 0.030203 | LR: 1.00e-03 | Time: 15.9s
-  Epoch  400/8000 | Train: 0.027918 | Val: 0.029735 | LR: 1.00e-03 | Time: 30.2s
-  Epoch  600/8000 | Train: 0.026285 | Val: 0.028852 | LR: 1.00e-03 | Time: 44.7s
-  Epoch  800/8000 | Train: 0.024726 | Val: 0.028494 | LR: 1.00e-03 | Time: 58.6s
-  Epoch 1000/8000 | Train: 0.024170 | Val: 0.027759 | LR: 1.00e-03 | Time: 72.8s
-  Epoch 1200/8000 | Train: 0.022941 | Val: 0.026396 | LR: 1.00e-03 | Time: 87.0s
-  Epoch 1400/8000 | Train: 0.020955 | Val: 0.025899 | LR: 5.00e-04 | Time: 101.9s
-  Epoch 1600/8000 | Train: 0.020811 | Val: 0.026012 | LR: 5.00e-04 | Time: 115.9s
-  Epoch 1800/8000 | Train: 0.019216 | Val: 0.025507 | LR: 2.50e-04 | Time: 130.4s
-  Epoch 2000/8000 | Train: 0.019010 | Val: 0.025418 | LR: 2.50e-04 | Time: 144.6s
-  Epoch 2200/8000 | Train: 0.018205 | Val: 0.025674 | LR: 1.25e-04 | Time: 160.0s
-  Epoch 2400/8000 | Train: 0.017895 | Val: 0.025567 | LR: 6.25e-05 | Time: 176.1s
-  Early stopping at epoch 2494
-  Best val loss: 0.025220 @ epoch 1994
+  Epoch    1/8000 | Train: 0.094441 | Val: 0.080567 | LR: 1.00e-03 | Time: 0.1s
+  Epoch  200/8000 | Train: 0.029829 | Val: 0.030903 | LR: 1.00e-03 | Time: 15.9s
+  Epoch  400/8000 | Train: 0.028214 | Val: 0.027670 | LR: 1.00e-03 | Time: 31.3s
+  Epoch  600/8000 | Train: 0.026402 | Val: 0.027314 | LR: 1.00e-03 | Time: 46.6s
+  Epoch  800/8000 | Train: 0.024876 | Val: 0.027191 | LR: 1.00e-03 | Time: 61.9s
+  Epoch 1000/8000 | Train: 0.023631 | Val: 0.027803 | LR: 1.00e-03 | Time: 77.1s
+  Epoch 1200/8000 | Train: 0.022127 | Val: 0.026560 | LR: 5.00e-04 | Time: 91.7s
+  Epoch 1400/8000 | Train: 0.021163 | Val: 0.025749 | LR: 2.50e-04 | Time: 106.5s
+  Epoch 1600/8000 | Train: 0.020537 | Val: 0.025590 | LR: 2.50e-04 | Time: 121.8s
+  Early stopping at epoch 1699
+  Best val loss: 0.025103 @ epoch 1199
   ✓ New best model saved: best_model_SimpleFCNN_hs512_lr0.001_bs32.pth
 
 [4/16] Training Configuration:
@@ -107,26 +91,27 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    369,356
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 0.103557 | Val: 0.092016 | LR: 3.00e-04 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.032448 | Val: 0.032013 | LR: 3.00e-04 | Time: 15.4s
-  Epoch  400/8000 | Train: 0.030578 | Val: 0.031051 | LR: 3.00e-04 | Time: 30.9s
-  Epoch  600/8000 | Train: 0.029402 | Val: 0.030396 | LR: 3.00e-04 | Time: 46.0s
-  Epoch  800/8000 | Train: 0.028013 | Val: 0.030046 | LR: 3.00e-04 | Time: 62.7s
-  Epoch 1000/8000 | Train: 0.027463 | Val: 0.029051 | LR: 3.00e-04 | Time: 83.6s
-  Epoch 1200/8000 | Train: 0.026852 | Val: 0.028955 | LR: 3.00e-04 | Time: 105.4s
-  Epoch 1400/8000 | Train: 0.025956 | Val: 0.028872 | LR: 3.00e-04 | Time: 126.6s
-  Epoch 1600/8000 | Train: 0.025775 | Val: 0.028256 | LR: 3.00e-04 | Time: 149.0s
-  Epoch 1800/8000 | Train: 0.025241 | Val: 0.028135 | LR: 3.00e-04 | Time: 169.7s
-  Epoch 2000/8000 | Train: 0.024757 | Val: 0.027684 | LR: 3.00e-04 | Time: 190.5s
-  Epoch 2200/8000 | Train: 0.024301 | Val: 0.027349 | LR: 3.00e-04 | Time: 211.3s
-  Epoch 2400/8000 | Train: 0.023782 | Val: 0.027853 | LR: 3.00e-04 | Time: 233.2s
-  Epoch 2600/8000 | Train: 0.023604 | Val: 0.027478 | LR: 3.00e-04 | Time: 251.5s
-  Epoch 2800/8000 | Train: 0.022865 | Val: 0.027478 | LR: 1.50e-04 | Time: 266.4s
-  Epoch 3000/8000 | Train: 0.022617 | Val: 0.027206 | LR: 1.50e-04 | Time: 282.0s
-  Epoch 3200/8000 | Train: 0.022190 | Val: 0.027134 | LR: 7.50e-05 | Time: 297.2s
-  Epoch 3400/8000 | Train: 0.021899 | Val: 0.026913 | LR: 3.75e-05 | Time: 317.9s
-  Early stopping at epoch 3470
-  Best val loss: 0.026789 @ epoch 2970
+  Epoch    1/8000 | Train: 0.102338 | Val: 0.088461 | LR: 3.00e-04 | Time: 0.1s
+  Epoch  200/8000 | Train: 0.032762 | Val: 0.032238 | LR: 3.00e-04 | Time: 15.6s
+  Epoch  400/8000 | Train: 0.030806 | Val: 0.029127 | LR: 3.00e-04 | Time: 30.5s
+  Epoch  600/8000 | Train: 0.028858 | Val: 0.028387 | LR: 3.00e-04 | Time: 45.3s
+  Epoch  800/8000 | Train: 0.027876 | Val: 0.027766 | LR: 3.00e-04 | Time: 60.5s
+  Epoch 1000/8000 | Train: 0.027037 | Val: 0.028107 | LR: 3.00e-04 | Time: 75.7s
+  Epoch 1200/8000 | Train: 0.026528 | Val: 0.027711 | LR: 3.00e-04 | Time: 90.4s
+  Epoch 1400/8000 | Train: 0.025642 | Val: 0.026709 | LR: 3.00e-04 | Time: 105.0s
+  Epoch 1600/8000 | Train: 0.025444 | Val: 0.026783 | LR: 3.00e-04 | Time: 121.7s
+  Epoch 1800/8000 | Train: 0.024935 | Val: 0.027036 | LR: 3.00e-04 | Time: 138.1s
+  Epoch 2000/8000 | Train: 0.024255 | Val: 0.026575 | LR: 3.00e-04 | Time: 154.3s
+  Epoch 2200/8000 | Train: 0.023908 | Val: 0.026752 | LR: 3.00e-04 | Time: 172.4s
+  Epoch 2400/8000 | Train: 0.023364 | Val: 0.026591 | LR: 3.00e-04 | Time: 192.1s
+  Epoch 2600/8000 | Train: 0.023313 | Val: 0.026557 | LR: 3.00e-04 | Time: 209.4s
+  Epoch 2800/8000 | Train: 0.022930 | Val: 0.026491 | LR: 3.00e-04 | Time: 227.6s
+  Epoch 3000/8000 | Train: 0.022322 | Val: 0.025734 | LR: 3.00e-04 | Time: 245.6s
+  Epoch 3200/8000 | Train: 0.021712 | Val: 0.025777 | LR: 1.50e-04 | Time: 263.8s
+  Epoch 3400/8000 | Train: 0.021419 | Val: 0.025388 | LR: 1.50e-04 | Time: 281.3s
+  Epoch 3600/8000 | Train: 0.020993 | Val: 0.025415 | LR: 7.50e-05 | Time: 299.1s
+  Early stopping at epoch 3734
+  Best val loss: 0.025143 @ epoch 3379
 
 [5/16] Training Configuration:
 ------------------------------------------------------------
@@ -137,27 +122,21 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    119,244
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 0.112362 | Val: 0.095169 | LR: 1.00e-03 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.033714 | Val: 0.032895 | LR: 1.00e-03 | Time: 9.2s
-  Epoch  400/8000 | Train: 0.030860 | Val: 0.031495 | LR: 1.00e-03 | Time: 17.9s
-  Epoch  600/8000 | Train: 0.029451 | Val: 0.030046 | LR: 1.00e-03 | Time: 26.5s
-  Epoch  800/8000 | Train: 0.028342 | Val: 0.029823 | LR: 1.00e-03 | Time: 35.2s
-  Epoch 1000/8000 | Train: 0.027684 | Val: 0.029183 | LR: 1.00e-03 | Time: 44.0s
-  Epoch 1200/8000 | Train: 0.026963 | Val: 0.029083 | LR: 1.00e-03 | Time: 52.9s
-  Epoch 1400/8000 | Train: 0.026648 | Val: 0.028930 | LR: 1.00e-03 | Time: 61.6s
-  Epoch 1600/8000 | Train: 0.025901 | Val: 0.028637 | LR: 5.00e-04 | Time: 70.6s
-  Epoch 1800/8000 | Train: 0.025407 | Val: 0.028307 | LR: 5.00e-04 | Time: 79.4s
-  Epoch 2000/8000 | Train: 0.024983 | Val: 0.028298 | LR: 2.50e-04 | Time: 87.9s
-  Epoch 2200/8000 | Train: 0.025001 | Val: 0.028104 | LR: 2.50e-04 | Time: 96.4s
-  Epoch 2400/8000 | Train: 0.024724 | Val: 0.028118 | LR: 2.50e-04 | Time: 104.9s
-  Epoch 2600/8000 | Train: 0.024555 | Val: 0.027989 | LR: 2.50e-04 | Time: 114.7s
-  Epoch 2800/8000 | Train: 0.024386 | Val: 0.027929 | LR: 2.50e-04 | Time: 122.1s
-  Epoch 3000/8000 | Train: 0.024145 | Val: 0.027905 | LR: 1.25e-04 | Time: 129.4s
-  Epoch 3200/8000 | Train: 0.024046 | Val: 0.027807 | LR: 6.25e-05 | Time: 136.7s
-  Epoch 3400/8000 | Train: 0.024021 | Val: 0.027888 | LR: 6.25e-05 | Time: 144.5s
-  Epoch 3600/8000 | Train: 0.023942 | Val: 0.027793 | LR: 3.13e-05 | Time: 152.0s
-  Early stopping at epoch 3723
-  Best val loss: 0.027715 @ epoch 3223
+  Epoch    1/8000 | Train: 0.110658 | Val: 0.092699 | LR: 1.00e-03 | Time: 0.0s
+  Epoch  200/8000 | Train: 0.033427 | Val: 0.030779 | LR: 1.00e-03 | Time: 7.7s
+  Epoch  400/8000 | Train: 0.031455 | Val: 0.030396 | LR: 1.00e-03 | Time: 14.8s
+  Epoch  600/8000 | Train: 0.029343 | Val: 0.028097 | LR: 1.00e-03 | Time: 22.1s
+  Epoch  800/8000 | Train: 0.028532 | Val: 0.028101 | LR: 1.00e-03 | Time: 29.6s
+  Epoch 1000/8000 | Train: 0.027285 | Val: 0.028162 | LR: 1.00e-03 | Time: 37.2s
+  Epoch 1200/8000 | Train: 0.026710 | Val: 0.027967 | LR: 1.00e-03 | Time: 44.6s
+  Epoch 1400/8000 | Train: 0.026003 | Val: 0.027733 | LR: 5.00e-04 | Time: 52.3s
+  Epoch 1600/8000 | Train: 0.025995 | Val: 0.027079 | LR: 5.00e-04 | Time: 59.6s
+  Epoch 1800/8000 | Train: 0.025515 | Val: 0.028331 | LR: 5.00e-04 | Time: 66.9s
+  Epoch 2000/8000 | Train: 0.025312 | Val: 0.026844 | LR: 5.00e-04 | Time: 74.2s
+  Epoch 2200/8000 | Train: 0.024489 | Val: 0.027097 | LR: 2.50e-04 | Time: 81.5s
+  Epoch 2400/8000 | Train: 0.024198 | Val: 0.026927 | LR: 1.25e-04 | Time: 88.8s
+  Early stopping at epoch 2442
+  Best val loss: 0.026554 @ epoch 1942
 
 [6/16] Training Configuration:
 ------------------------------------------------------------
@@ -168,27 +147,28 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    119,244
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 0.132383 | Val: 0.106806 | LR: 3.00e-04 | Time: 0.0s
-  Epoch  200/8000 | Train: 0.036969 | Val: 0.035408 | LR: 3.00e-04 | Time: 7.3s
-  Epoch  400/8000 | Train: 0.033849 | Val: 0.033111 | LR: 3.00e-04 | Time: 14.9s
-  Epoch  600/8000 | Train: 0.031858 | Val: 0.031648 | LR: 3.00e-04 | Time: 22.0s
-  Epoch  800/8000 | Train: 0.030917 | Val: 0.031141 | LR: 3.00e-04 | Time: 30.1s
-  Epoch 1000/8000 | Train: 0.030389 | Val: 0.030911 | LR: 3.00e-04 | Time: 38.6s
-  Epoch 1200/8000 | Train: 0.030008 | Val: 0.030634 | LR: 3.00e-04 | Time: 46.7s
-  Epoch 1400/8000 | Train: 0.029595 | Val: 0.030340 | LR: 3.00e-04 | Time: 54.8s
-  Epoch 1600/8000 | Train: 0.029430 | Val: 0.030512 | LR: 3.00e-04 | Time: 63.7s
-  Epoch 1800/8000 | Train: 0.029061 | Val: 0.030069 | LR: 3.00e-04 | Time: 71.9s
-  Epoch 2000/8000 | Train: 0.028547 | Val: 0.029961 | LR: 3.00e-04 | Time: 79.6s
-  Epoch 2200/8000 | Train: 0.028531 | Val: 0.030095 | LR: 3.00e-04 | Time: 88.0s
-  Epoch 2400/8000 | Train: 0.028185 | Val: 0.029626 | LR: 3.00e-04 | Time: 96.8s
-  Epoch 2600/8000 | Train: 0.027633 | Val: 0.029329 | LR: 1.50e-04 | Time: 105.2s
-  Epoch 2800/8000 | Train: 0.027478 | Val: 0.029480 | LR: 1.50e-04 | Time: 113.7s
-  Epoch 3000/8000 | Train: 0.027397 | Val: 0.029433 | LR: 1.50e-04 | Time: 122.4s
-  Epoch 3200/8000 | Train: 0.027156 | Val: 0.029326 | LR: 7.50e-05 | Time: 131.1s
-  Epoch 3400/8000 | Train: 0.027094 | Val: 0.029325 | LR: 7.50e-05 | Time: 139.3s
-  Epoch 3600/8000 | Train: 0.026964 | Val: 0.029252 | LR: 3.75e-05 | Time: 147.6s
-  Early stopping at epoch 3733
-  Best val loss: 0.029149 @ epoch 3233
+  Epoch    1/8000 | Train: 0.129644 | Val: 0.101736 | LR: 3.00e-04 | Time: 0.0s
+  Epoch  200/8000 | Train: 0.036905 | Val: 0.034383 | LR: 3.00e-04 | Time: 7.6s
+  Epoch  400/8000 | Train: 0.033795 | Val: 0.031347 | LR: 3.00e-04 | Time: 14.8s
+  Epoch  600/8000 | Train: 0.031923 | Val: 0.030432 | LR: 3.00e-04 | Time: 22.1s
+  Epoch  800/8000 | Train: 0.031426 | Val: 0.029868 | LR: 3.00e-04 | Time: 29.5s
+  Epoch 1000/8000 | Train: 0.030618 | Val: 0.029418 | LR: 3.00e-04 | Time: 36.8s
+  Epoch 1200/8000 | Train: 0.030178 | Val: 0.030046 | LR: 3.00e-04 | Time: 44.2s
+  Epoch 1400/8000 | Train: 0.030084 | Val: 0.029535 | LR: 3.00e-04 | Time: 51.6s
+  Epoch 1600/8000 | Train: 0.029683 | Val: 0.029174 | LR: 3.00e-04 | Time: 59.0s
+  Epoch 1800/8000 | Train: 0.029263 | Val: 0.029733 | LR: 3.00e-04 | Time: 66.1s
+  Epoch 2000/8000 | Train: 0.029058 | Val: 0.028848 | LR: 3.00e-04 | Time: 73.4s
+  Epoch 2200/8000 | Train: 0.028599 | Val: 0.028825 | LR: 3.00e-04 | Time: 80.7s
+  Epoch 2400/8000 | Train: 0.028260 | Val: 0.028574 | LR: 3.00e-04 | Time: 88.0s
+  Epoch 2600/8000 | Train: 0.028035 | Val: 0.028529 | LR: 3.00e-04 | Time: 95.2s
+  Epoch 2800/8000 | Train: 0.027792 | Val: 0.028303 | LR: 1.50e-04 | Time: 102.3s
+  Epoch 3000/8000 | Train: 0.027480 | Val: 0.028368 | LR: 1.50e-04 | Time: 109.8s
+  Epoch 3200/8000 | Train: 0.027373 | Val: 0.028129 | LR: 1.50e-04 | Time: 117.0s
+  Epoch 3400/8000 | Train: 0.027347 | Val: 0.028092 | LR: 1.50e-04 | Time: 124.3s
+  Epoch 3600/8000 | Train: 0.027324 | Val: 0.028237 | LR: 1.50e-04 | Time: 131.7s
+  Epoch 3800/8000 | Train: 0.026954 | Val: 0.028133 | LR: 7.50e-05 | Time: 139.2s
+  Early stopping at epoch 3961
+  Best val loss: 0.027905 @ epoch 3461
 
 [7/16] Training Configuration:
 ------------------------------------------------------------
@@ -199,25 +179,19 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    369,356
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 0.104868 | Val: 0.091194 | LR: 1.00e-03 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.030980 | Val: 0.031091 | LR: 1.00e-03 | Time: 12.0s
-  Epoch  400/8000 | Train: 0.028945 | Val: 0.030129 | LR: 1.00e-03 | Time: 23.6s
-  Epoch  600/8000 | Train: 0.027120 | Val: 0.029020 | LR: 1.00e-03 | Time: 35.3s
-  Epoch  800/8000 | Train: 0.026110 | Val: 0.028761 | LR: 1.00e-03 | Time: 46.7s
-  Epoch 1000/8000 | Train: 0.025297 | Val: 0.026991 | LR: 1.00e-03 | Time: 59.2s
-  Epoch 1200/8000 | Train: 0.024242 | Val: 0.027080 | LR: 1.00e-03 | Time: 72.5s
-  Epoch 1400/8000 | Train: 0.023429 | Val: 0.027280 | LR: 1.00e-03 | Time: 84.6s
-  Epoch 1600/8000 | Train: 0.022914 | Val: 0.026232 | LR: 1.00e-03 | Time: 96.4s
-  Epoch 1800/8000 | Train: 0.022157 | Val: 0.025980 | LR: 1.00e-03 | Time: 108.2s
-  Epoch 2000/8000 | Train: 0.020356 | Val: 0.025385 | LR: 5.00e-04 | Time: 120.1s
-  Epoch 2200/8000 | Train: 0.019454 | Val: 0.025220 | LR: 2.50e-04 | Time: 131.9s
-  Epoch 2400/8000 | Train: 0.019260 | Val: 0.025039 | LR: 2.50e-04 | Time: 144.1s
-  Epoch 2600/8000 | Train: 0.018770 | Val: 0.025086 | LR: 1.25e-04 | Time: 156.4s
-  Epoch 2800/8000 | Train: 0.018695 | Val: 0.024998 | LR: 1.25e-04 | Time: 168.0s
-  Epoch 3000/8000 | Train: 0.018484 | Val: 0.024996 | LR: 6.25e-05 | Time: 179.8s
-  Early stopping at epoch 3142
-  Best val loss: 0.024818 @ epoch 2642
-  ✓ New best model saved: best_model_SimpleFCNN_hs512_lr0.001_bs64.pth
+  Epoch    1/8000 | Train: 0.102131 | Val: 0.086326 | LR: 1.00e-03 | Time: 0.1s
+  Epoch  200/8000 | Train: 0.031083 | Val: 0.030250 | LR: 1.00e-03 | Time: 10.4s
+  Epoch  400/8000 | Train: 0.028672 | Val: 0.027805 | LR: 1.00e-03 | Time: 20.3s
+  Epoch  600/8000 | Train: 0.027134 | Val: 0.027844 | LR: 1.00e-03 | Time: 30.7s
+  Epoch  800/8000 | Train: 0.025961 | Val: 0.027175 | LR: 1.00e-03 | Time: 42.1s
+  Epoch 1000/8000 | Train: 0.025041 | Val: 0.027954 | LR: 1.00e-03 | Time: 51.8s
+  Epoch 1200/8000 | Train: 0.023515 | Val: 0.026442 | LR: 5.00e-04 | Time: 62.0s
+  Epoch 1400/8000 | Train: 0.022698 | Val: 0.026376 | LR: 5.00e-04 | Time: 71.9s
+  Epoch 1600/8000 | Train: 0.022723 | Val: 0.025536 | LR: 5.00e-04 | Time: 81.7s
+  Epoch 1800/8000 | Train: 0.021503 | Val: 0.026063 | LR: 2.50e-04 | Time: 92.0s
+  Epoch 2000/8000 | Train: 0.020884 | Val: 0.025716 | LR: 1.25e-04 | Time: 104.5s
+  Early stopping at epoch 2034
+  Best val loss: 0.025368 @ epoch 1534
 
 [8/16] Training Configuration:
 ------------------------------------------------------------
@@ -228,39 +202,27 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    369,356
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 0.112723 | Val: 0.097131 | LR: 3.00e-04 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.034858 | Val: 0.033651 | LR: 3.00e-04 | Time: 12.5s
-  Epoch  400/8000 | Train: 0.031757 | Val: 0.031377 | LR: 3.00e-04 | Time: 25.3s
-  Epoch  600/8000 | Train: 0.030431 | Val: 0.030849 | LR: 3.00e-04 | Time: 37.0s
-  Epoch  800/8000 | Train: 0.029749 | Val: 0.030822 | LR: 3.00e-04 | Time: 49.3s
-  Epoch 1000/8000 | Train: 0.028869 | Val: 0.029551 | LR: 3.00e-04 | Time: 63.0s
-  Epoch 1200/8000 | Train: 0.028451 | Val: 0.029544 | LR: 3.00e-04 | Time: 74.8s
-  Epoch 1400/8000 | Train: 0.027728 | Val: 0.029674 | LR: 3.00e-04 | Time: 85.6s
-  Epoch 1600/8000 | Train: 0.027479 | Val: 0.029017 | LR: 3.00e-04 | Time: 97.4s
-  Epoch 1800/8000 | Train: 0.026802 | Val: 0.028731 | LR: 3.00e-04 | Time: 107.6s
-  Epoch 2000/8000 | Train: 0.026457 | Val: 0.028617 | LR: 3.00e-04 | Time: 117.6s
-  Epoch 2200/8000 | Train: 0.025979 | Val: 0.028522 | LR: 1.50e-04 | Time: 127.3s
-  Epoch 2400/8000 | Train: 0.025700 | Val: 0.028383 | LR: 1.50e-04 | Time: 137.5s
-  Epoch 2600/8000 | Train: 0.025438 | Val: 0.028337 | LR: 1.50e-04 | Time: 148.7s
-  Epoch 2800/8000 | Train: 0.025220 | Val: 0.028306 | LR: 1.50e-04 | Time: 160.2s
-  Epoch 3000/8000 | Train: 0.025137 | Val: 0.028098 | LR: 1.50e-04 | Time: 170.5s
-  Epoch 3200/8000 | Train: 0.024955 | Val: 0.028102 | LR: 1.50e-04 | Time: 181.1s
-  Epoch 3400/8000 | Train: 0.024649 | Val: 0.027818 | LR: 1.50e-04 | Time: 194.1s
-  Epoch 3600/8000 | Train: 0.024569 | Val: 0.027918 | LR: 1.50e-04 | Time: 205.5s
-  Epoch 3800/8000 | Train: 0.024243 | Val: 0.027834 | LR: 1.50e-04 | Time: 215.2s
-  Epoch 4000/8000 | Train: 0.024179 | Val: 0.027628 | LR: 1.50e-04 | Time: 224.8s
-  Epoch 4200/8000 | Train: 0.024052 | Val: 0.027673 | LR: 1.50e-04 | Time: 234.0s
-  Epoch 4400/8000 | Train: 0.023916 | Val: 0.027500 | LR: 1.50e-04 | Time: 243.5s
-  Epoch 4600/8000 | Train: 0.023769 | Val: 0.027394 | LR: 1.50e-04 | Time: 252.8s
-  Epoch 4800/8000 | Train: 0.023543 | Val: 0.027456 | LR: 1.50e-04 | Time: 261.7s
-  Epoch 5000/8000 | Train: 0.023313 | Val: 0.027150 | LR: 7.50e-05 | Time: 273.0s
-  Epoch 5200/8000 | Train: 0.023232 | Val: 0.027234 | LR: 7.50e-05 | Time: 284.2s
-  Epoch 5400/8000 | Train: 0.023072 | Val: 0.027128 | LR: 3.75e-05 | Time: 296.1s
-  Epoch 5600/8000 | Train: 0.023053 | Val: 0.027071 | LR: 3.75e-05 | Time: 308.0s
-  Epoch 5800/8000 | Train: 0.023026 | Val: 0.027201 | LR: 3.75e-05 | Time: 319.4s
-  Epoch 6000/8000 | Train: 0.022920 | Val: 0.027148 | LR: 1.87e-05 | Time: 329.0s
-  Early stopping at epoch 6178
-  Best val loss: 0.027020 @ epoch 5678
+  Epoch    1/8000 | Train: 0.110884 | Val: 0.093077 | LR: 3.00e-04 | Time: 0.1s
+  Epoch  200/8000 | Train: 0.035092 | Val: 0.033667 | LR: 3.00e-04 | Time: 13.8s
+  Epoch  400/8000 | Train: 0.031694 | Val: 0.030547 | LR: 3.00e-04 | Time: 27.5s
+  Epoch  600/8000 | Train: 0.030449 | Val: 0.030418 | LR: 3.00e-04 | Time: 40.2s
+  Epoch  800/8000 | Train: 0.029496 | Val: 0.028430 | LR: 3.00e-04 | Time: 53.1s
+  Epoch 1000/8000 | Train: 0.028845 | Val: 0.028371 | LR: 3.00e-04 | Time: 65.9s
+  Epoch 1200/8000 | Train: 0.028387 | Val: 0.028004 | LR: 3.00e-04 | Time: 78.9s
+  Epoch 1400/8000 | Train: 0.027613 | Val: 0.027891 | LR: 3.00e-04 | Time: 91.7s
+  Epoch 1600/8000 | Train: 0.027527 | Val: 0.027497 | LR: 3.00e-04 | Time: 104.6s
+  Epoch 1800/8000 | Train: 0.027160 | Val: 0.027696 | LR: 3.00e-04 | Time: 117.9s
+  Epoch 2000/8000 | Train: 0.026463 | Val: 0.027253 | LR: 3.00e-04 | Time: 131.6s
+  Epoch 2200/8000 | Train: 0.026099 | Val: 0.027134 | LR: 3.00e-04 | Time: 144.5s
+  Epoch 2400/8000 | Train: 0.025430 | Val: 0.026890 | LR: 1.50e-04 | Time: 157.3s
+  Epoch 2600/8000 | Train: 0.025232 | Val: 0.027078 | LR: 1.50e-04 | Time: 170.8s
+  Epoch 2800/8000 | Train: 0.025102 | Val: 0.026895 | LR: 1.50e-04 | Time: 182.6s
+  Epoch 3000/8000 | Train: 0.024862 | Val: 0.026502 | LR: 1.50e-04 | Time: 195.1s
+  Epoch 3200/8000 | Train: 0.024723 | Val: 0.026586 | LR: 1.50e-04 | Time: 208.1s
+  Epoch 3400/8000 | Train: 0.024333 | Val: 0.026662 | LR: 7.50e-05 | Time: 220.3s
+  Epoch 3600/8000 | Train: 0.024173 | Val: 0.026640 | LR: 3.75e-05 | Time: 233.6s
+  Early stopping at epoch 3606
+  Best val loss: 0.026417 @ epoch 3106
 
 [9/16] Training Configuration:
 ------------------------------------------------------------
@@ -271,16 +233,16 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    449,740
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 2.880384 | Val: 0.200593 | LR: 1.00e-03 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.033229 | Val: 0.031980 | LR: 1.00e-03 | Time: 31.1s
-  Epoch  400/8000 | Train: 0.029848 | Val: 0.030596 | LR: 1.00e-03 | Time: 60.2s
-  Epoch  600/8000 | Train: 0.020122 | Val: 0.026623 | LR: 1.00e-03 | Time: 90.8s
-  Epoch  800/8000 | Train: 0.016311 | Val: 0.024606 | LR: 1.00e-03 | Time: 122.6s
-  Epoch 1000/8000 | Train: 0.014355 | Val: 0.026714 | LR: 1.00e-03 | Time: 154.7s
-  Epoch 1200/8000 | Train: 0.016898 | Val: 0.024114 | LR: 1.00e-03 | Time: 185.9s
-  Epoch 1400/8000 | Train: 0.008403 | Val: 0.026160 | LR: 5.00e-04 | Time: 218.2s
-  Early stopping at epoch 1576
-  Best val loss: 0.021585 @ epoch 1076
+  Epoch    1/8000 | Train: 2.555453 | Val: 0.226025 | LR: 1.00e-03 | Time: 0.2s
+  Epoch  200/8000 | Train: 0.032783 | Val: 0.029955 | LR: 1.00e-03 | Time: 34.4s
+  Epoch  400/8000 | Train: 0.027437 | Val: 0.029695 | LR: 1.00e-03 | Time: 69.3s
+  Epoch  600/8000 | Train: 0.019742 | Val: 0.025532 | LR: 1.00e-03 | Time: 103.9s
+  Epoch  800/8000 | Train: 0.017240 | Val: 0.025015 | LR: 1.00e-03 | Time: 137.3s
+  Epoch 1000/8000 | Train: 0.013637 | Val: 0.023735 | LR: 1.00e-03 | Time: 165.6s
+  Epoch 1200/8000 | Train: 0.013527 | Val: 0.024946 | LR: 1.00e-03 | Time: 200.7s
+  Epoch 1400/8000 | Train: 0.008900 | Val: 0.027051 | LR: 5.00e-04 | Time: 234.9s
+  Early stopping at epoch 1503
+  Best val loss: 0.021503 @ epoch 1003
   ✓ New best model saved: best_model_GaitFFTPredictor_hs256_lr0.001_bs32.pth
 
 [10/16] Training Configuration:
@@ -292,16 +254,16 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    449,740
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 4.429945 | Val: 0.215459 | LR: 3.00e-04 | Time: 0.2s
-  Epoch  200/8000 | Train: 0.035255 | Val: 0.033786 | LR: 3.00e-04 | Time: 31.5s
-  Epoch  400/8000 | Train: 0.030050 | Val: 0.030835 | LR: 3.00e-04 | Time: 62.0s
-  Epoch  600/8000 | Train: 0.026904 | Val: 0.029347 | LR: 3.00e-04 | Time: 92.2s
-  Epoch  800/8000 | Train: 0.020980 | Val: 0.031381 | LR: 3.00e-04 | Time: 124.4s
-  Epoch 1000/8000 | Train: 0.016055 | Val: 0.027603 | LR: 3.00e-04 | Time: 152.7s
-  Epoch 1200/8000 | Train: 0.013834 | Val: 0.024781 | LR: 3.00e-04 | Time: 182.6s
-  Epoch 1400/8000 | Train: 0.009699 | Val: 0.025963 | LR: 1.50e-04 | Time: 214.7s
+  Epoch    1/8000 | Train: 3.899521 | Val: 0.192925 | LR: 3.00e-04 | Time: 0.2s
+  Epoch  200/8000 | Train: 0.033368 | Val: 0.031630 | LR: 3.00e-04 | Time: 34.1s
+  Epoch  400/8000 | Train: 0.028762 | Val: 0.029420 | LR: 3.00e-04 | Time: 68.2s
+  Epoch  600/8000 | Train: 0.024113 | Val: 0.027125 | LR: 3.00e-04 | Time: 98.1s
+  Epoch  800/8000 | Train: 0.018692 | Val: 0.026269 | LR: 3.00e-04 | Time: 125.6s
+  Epoch 1000/8000 | Train: 0.015900 | Val: 0.024300 | LR: 3.00e-04 | Time: 151.7s
+  Epoch 1200/8000 | Train: 0.013605 | Val: 0.026326 | LR: 3.00e-04 | Time: 178.9s
+  Epoch 1400/8000 | Train: 0.008939 | Val: 0.027443 | LR: 1.50e-04 | Time: 205.8s
   Early stopping at epoch 1503
-  Best val loss: 0.022838 @ epoch 1003
+  Best val loss: 0.023016 @ epoch 1003
 
 [11/16] Training Configuration:
 ------------------------------------------------------------
@@ -312,23 +274,20 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    1,685,708
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 5.746709 | Val: 0.367889 | LR: 1.00e-03 | Time: 0.3s
-  Epoch  200/8000 | Train: 0.035633 | Val: 0.035133 | LR: 1.00e-03 | Time: 49.5s
-  Epoch  400/8000 | Train: 0.034861 | Val: 0.034227 | LR: 1.00e-03 | Time: 101.1s
-  Epoch  600/8000 | Train: 0.033027 | Val: 0.031969 | LR: 1.00e-03 | Time: 152.6s
-  Epoch  800/8000 | Train: 0.032883 | Val: 0.034146 | LR: 1.00e-03 | Time: 203.0s
-  Epoch 1000/8000 | Train: 0.032728 | Val: 0.031863 | LR: 1.00e-03 | Time: 255.3s
-  Epoch 1200/8000 | Train: 0.030488 | Val: 0.031987 | LR: 5.00e-04 | Time: 308.0s
-  Epoch 1400/8000 | Train: 0.028071 | Val: 0.030988 | LR: 5.00e-04 | Time: 357.7s
-  Epoch 1600/8000 | Train: 0.025858 | Val: 0.030323 | LR: 5.00e-04 | Time: 408.2s
-  Epoch 1800/8000 | Train: 0.023654 | Val: 0.030304 | LR: 5.00e-04 | Time: 459.6s
-  Epoch 2000/8000 | Train: 0.022668 | Val: 0.030077 | LR: 5.00e-04 | Time: 509.5s
-  Epoch 2200/8000 | Train: 0.021247 | Val: 0.028819 | LR: 5.00e-04 | Time: 560.3s
-  Epoch 2400/8000 | Train: 0.019098 | Val: 0.026354 | LR: 5.00e-04 | Time: 610.3s
-  Epoch 2600/8000 | Train: 0.019656 | Val: 0.027717 | LR: 5.00e-04 | Time: 662.4s
-  Epoch 2800/8000 | Train: 0.014579 | Val: 0.027960 | LR: 2.50e-04 | Time: 714.4s
-  Early stopping at epoch 2900
-  Best val loss: 0.026354 @ epoch 2400
+  Epoch    1/8000 | Train: 4.967762 | Val: 0.304551 | LR: 1.00e-03 | Time: 0.3s
+  Epoch  200/8000 | Train: 0.035708 | Val: 0.033300 | LR: 1.00e-03 | Time: 51.4s
+  Epoch  400/8000 | Train: 0.034941 | Val: 0.032412 | LR: 1.00e-03 | Time: 108.4s
+  Epoch  600/8000 | Train: 0.033403 | Val: 0.032016 | LR: 1.00e-03 | Time: 165.5s
+  Epoch  800/8000 | Train: 0.033469 | Val: 0.031583 | LR: 1.00e-03 | Time: 222.4s
+  Epoch 1000/8000 | Train: 0.032258 | Val: 0.030129 | LR: 1.00e-03 | Time: 283.5s
+  Epoch 1200/8000 | Train: 0.029563 | Val: 0.029711 | LR: 5.00e-04 | Time: 341.7s
+  Epoch 1400/8000 | Train: 0.028352 | Val: 0.028475 | LR: 5.00e-04 | Time: 399.7s
+  Epoch 1600/8000 | Train: 0.023749 | Val: 0.027699 | LR: 5.00e-04 | Time: 458.3s
+  Epoch 1800/8000 | Train: 0.021022 | Val: 0.029121 | LR: 5.00e-04 | Time: 517.6s
+  Epoch 2000/8000 | Train: 0.016948 | Val: 0.083485 | LR: 2.50e-04 | Time: 572.3s
+  Epoch 2200/8000 | Train: 0.012005 | Val: 1.251651 | LR: 1.25e-04 | Time: 635.0s
+  Early stopping at epoch 2219
+  Best val loss: 0.026433 @ epoch 1719
 
 [12/16] Training Configuration:
 ------------------------------------------------------------
@@ -339,17 +298,18 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    1,685,708
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 2.757088 | Val: 0.205666 | LR: 3.00e-04 | Time: 0.4s
-  Epoch  200/8000 | Train: 0.032778 | Val: 0.033068 | LR: 3.00e-04 | Time: 52.1s
-  Epoch  400/8000 | Train: 0.028487 | Val: 0.030806 | LR: 3.00e-04 | Time: 94.4s
-  Epoch  600/8000 | Train: 0.019836 | Val: 0.027905 | LR: 3.00e-04 | Time: 139.8s
-  Epoch  800/8000 | Train: 0.014398 | Val: 0.023283 | LR: 3.00e-04 | Time: 193.4s
-  Epoch 1000/8000 | Train: 0.013233 | Val: 0.023384 | LR: 3.00e-04 | Time: 244.4s
-  Epoch 1200/8000 | Train: 0.012383 | Val: 0.025563 | LR: 3.00e-04 | Time: 293.3s
-  Epoch 1400/8000 | Train: 0.007047 | Val: 0.022537 | LR: 1.50e-04 | Time: 342.3s
-  Epoch 1600/8000 | Train: 0.005552 | Val: 0.025068 | LR: 7.50e-05 | Time: 391.6s
-  Early stopping at epoch 1658
-  Best val loss: 0.021592 @ epoch 1158
+  Epoch    1/8000 | Train: 2.465050 | Val: 0.182609 | LR: 3.00e-04 | Time: 0.3s
+  Epoch  200/8000 | Train: 0.033375 | Val: 0.032714 | LR: 3.00e-04 | Time: 61.6s
+  Epoch  400/8000 | Train: 0.027344 | Val: 0.030321 | LR: 3.00e-04 | Time: 123.5s
+  Epoch  600/8000 | Train: 0.019568 | Val: 0.027861 | LR: 3.00e-04 | Time: 186.2s
+  Epoch  800/8000 | Train: 0.014365 | Val: 0.023623 | LR: 3.00e-04 | Time: 246.8s
+  Epoch 1000/8000 | Train: 0.013524 | Val: 0.024085 | LR: 3.00e-04 | Time: 307.3s
+  Epoch 1200/8000 | Train: 0.011278 | Val: 0.024658 | LR: 3.00e-04 | Time: 365.2s
+  Epoch 1400/8000 | Train: 0.010585 | Val: 0.022552 | LR: 3.00e-04 | Time: 423.4s
+  Epoch 1600/8000 | Train: 0.006879 | Val: 0.026639 | LR: 1.50e-04 | Time: 481.4s
+  Early stopping at epoch 1726
+  Best val loss: 0.021154 @ epoch 1226
+  ✓ New best model saved: best_model_GaitFFTPredictor_hs512_lr0.0003_bs32.pth
 
 [13/16] Training Configuration:
 ------------------------------------------------------------
@@ -360,16 +320,17 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    449,740
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 5.416150 | Val: 0.391964 | LR: 1.00e-03 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.033780 | Val: 0.033310 | LR: 1.00e-03 | Time: 18.1s
-  Epoch  400/8000 | Train: 0.029823 | Val: 0.031692 | LR: 1.00e-03 | Time: 36.3s
-  Epoch  600/8000 | Train: 0.026227 | Val: 0.028897 | LR: 1.00e-03 | Time: 54.2s
-  Epoch  800/8000 | Train: 0.021342 | Val: 0.030788 | LR: 1.00e-03 | Time: 72.4s
-  Epoch 1000/8000 | Train: 0.016936 | Val: 0.024675 | LR: 1.00e-03 | Time: 90.3s
-  Epoch 1200/8000 | Train: 0.013307 | Val: 0.023706 | LR: 1.00e-03 | Time: 108.2s
-  Epoch 1400/8000 | Train: 0.008590 | Val: 0.023286 | LR: 5.00e-04 | Time: 126.3s
-  Early stopping at epoch 1570
-  Best val loss: 0.021980 @ epoch 1070
+  Epoch    1/8000 | Train: 4.837776 | Val: 0.430711 | LR: 1.00e-03 | Time: 0.1s
+  Epoch  200/8000 | Train: 0.033005 | Val: 0.031333 | LR: 1.00e-03 | Time: 19.9s
+  Epoch  400/8000 | Train: 0.029764 | Val: 0.028870 | LR: 1.00e-03 | Time: 40.9s
+  Epoch  600/8000 | Train: 0.026405 | Val: 0.028849 | LR: 1.00e-03 | Time: 64.3s
+  Epoch  800/8000 | Train: 0.019966 | Val: 0.027062 | LR: 1.00e-03 | Time: 86.1s
+  Epoch 1000/8000 | Train: 0.015449 | Val: 0.025089 | LR: 1.00e-03 | Time: 108.1s
+  Epoch 1200/8000 | Train: 0.015190 | Val: 0.024955 | LR: 1.00e-03 | Time: 130.9s
+  Epoch 1400/8000 | Train: 0.013589 | Val: 0.024966 | LR: 1.00e-03 | Time: 153.1s
+  Epoch 1600/8000 | Train: 0.008608 | Val: 0.026116 | LR: 5.00e-04 | Time: 174.2s
+  Early stopping at epoch 1754
+  Best val loss: 0.021784 @ epoch 1254
 
 [14/16] Training Configuration:
 ------------------------------------------------------------
@@ -380,21 +341,20 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    449,740
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 8.373139 | Val: 0.703706 | LR: 3.00e-04 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.037324 | Val: 0.037800 | LR: 3.00e-04 | Time: 17.9s
-  Epoch  400/8000 | Train: 0.032363 | Val: 0.033390 | LR: 3.00e-04 | Time: 35.5s
-  Epoch  600/8000 | Train: 0.031099 | Val: 0.031930 | LR: 3.00e-04 | Time: 53.6s
-  Epoch  800/8000 | Train: 0.028214 | Val: 0.032557 | LR: 3.00e-04 | Time: 71.3s
-  Epoch 1000/8000 | Train: 0.024271 | Val: 0.028633 | LR: 3.00e-04 | Time: 89.2s
-  Epoch 1200/8000 | Train: 0.020758 | Val: 0.028661 | LR: 3.00e-04 | Time: 106.9s
-  Epoch 1400/8000 | Train: 0.022090 | Val: 0.029367 | LR: 3.00e-04 | Time: 124.7s
-  Epoch 1600/8000 | Train: 0.015574 | Val: 0.025540 | LR: 3.00e-04 | Time: 142.7s
-  Epoch 1800/8000 | Train: 0.015493 | Val: 0.027488 | LR: 3.00e-04 | Time: 160.3s
-  Epoch 2000/8000 | Train: 0.009487 | Val: 0.022982 | LR: 1.50e-04 | Time: 179.1s
-  Epoch 2200/8000 | Train: 0.007940 | Val: 0.022580 | LR: 7.50e-05 | Time: 197.3s
-  Epoch 2400/8000 | Train: 0.006823 | Val: 0.024218 | LR: 3.75e-05 | Time: 215.1s
-  Early stopping at epoch 2494
-  Best val loss: 0.021998 @ epoch 1994
+  Epoch    1/8000 | Train: 7.471892 | Val: 0.600999 | LR: 3.00e-04 | Time: 0.1s
+  Epoch  200/8000 | Train: 0.035910 | Val: 0.033237 | LR: 3.00e-04 | Time: 18.4s
+  Epoch  400/8000 | Train: 0.032156 | Val: 0.031652 | LR: 3.00e-04 | Time: 39.2s
+  Epoch  600/8000 | Train: 0.029173 | Val: 0.028830 | LR: 3.00e-04 | Time: 59.9s
+  Epoch  800/8000 | Train: 0.029222 | Val: 0.031700 | LR: 3.00e-04 | Time: 81.6s
+  Epoch 1000/8000 | Train: 0.022785 | Val: 0.030197 | LR: 3.00e-04 | Time: 103.0s
+  Epoch 1200/8000 | Train: 0.019581 | Val: 0.025524 | LR: 3.00e-04 | Time: 123.0s
+  Epoch 1400/8000 | Train: 0.015932 | Val: 0.028091 | LR: 3.00e-04 | Time: 144.0s
+  Epoch 1600/8000 | Train: 0.013514 | Val: 0.025379 | LR: 3.00e-04 | Time: 165.4s
+  Epoch 1800/8000 | Train: 0.012464 | Val: 0.028573 | LR: 3.00e-04 | Time: 186.3s
+  Epoch 2000/8000 | Train: 0.009199 | Val: 0.026195 | LR: 1.50e-04 | Time: 207.3s
+  Epoch 2200/8000 | Train: 0.007602 | Val: 0.025469 | LR: 7.50e-05 | Time: 228.0s
+  Early stopping at epoch 2200
+  Best val loss: 0.021815 @ epoch 1700
 
 [15/16] Training Configuration:
 ------------------------------------------------------------
@@ -405,20 +365,21 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    1,685,708
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 10.651889 | Val: 1.004083 | LR: 1.00e-03 | Time: 0.2s
-  Epoch  200/8000 | Train: 0.033603 | Val: 0.034895 | LR: 1.00e-03 | Time: 30.3s
-  Epoch  400/8000 | Train: 0.033076 | Val: 0.033375 | LR: 1.00e-03 | Time: 60.1s
-  Epoch  600/8000 | Train: 0.032231 | Val: 0.032319 | LR: 1.00e-03 | Time: 89.6s
-  Epoch  800/8000 | Train: 0.032655 | Val: 0.033186 | LR: 1.00e-03 | Time: 119.4s
-  Epoch 1000/8000 | Train: 0.031664 | Val: 0.031511 | LR: 1.00e-03 | Time: 149.1s
-  Epoch 1200/8000 | Train: 0.031406 | Val: 0.031411 | LR: 1.00e-03 | Time: 178.8s
-  Epoch 1400/8000 | Train: 0.026620 | Val: 0.028228 | LR: 5.00e-04 | Time: 208.8s
-  Epoch 1600/8000 | Train: 0.023153 | Val: 0.028671 | LR: 5.00e-04 | Time: 238.7s
-  Epoch 1800/8000 | Train: 0.019858 | Val: 0.027942 | LR: 2.50e-04 | Time: 268.3s
-  Epoch 2000/8000 | Train: 0.016715 | Val: 0.028820 | LR: 1.25e-04 | Time: 299.2s
-  Epoch 2200/8000 | Train: 0.014935 | Val: 0.028819 | LR: 6.25e-05 | Time: 329.3s
-  Early stopping at epoch 2297
-  Best val loss: 0.026572 @ epoch 1797
+  Epoch    1/8000 | Train: 9.451775 | Val: 0.664958 | LR: 1.00e-03 | Time: 0.2s
+  Epoch  200/8000 | Train: 0.034340 | Val: 0.032833 | LR: 1.00e-03 | Time: 36.0s
+  Epoch  400/8000 | Train: 0.033741 | Val: 0.032643 | LR: 1.00e-03 | Time: 72.2s
+  Epoch  600/8000 | Train: 0.030137 | Val: 0.029432 | LR: 5.00e-04 | Time: 110.0s
+  Epoch  800/8000 | Train: 0.028375 | Val: 0.029944 | LR: 5.00e-04 | Time: 145.7s
+  Epoch 1000/8000 | Train: 0.028224 | Val: 0.029803 | LR: 5.00e-04 | Time: 181.9s
+  Epoch 1200/8000 | Train: 0.026516 | Val: 0.028529 | LR: 5.00e-04 | Time: 216.3s
+  Epoch 1400/8000 | Train: 0.022704 | Val: 0.028450 | LR: 2.50e-04 | Time: 257.2s
+  Epoch 1600/8000 | Train: 0.019075 | Val: 0.027711 | LR: 2.50e-04 | Time: 293.8s
+  Epoch 1800/8000 | Train: 0.016829 | Val: 0.031004 | LR: 2.50e-04 | Time: 331.5s
+  Epoch 2000/8000 | Train: 0.014282 | Val: 0.026813 | LR: 2.50e-04 | Time: 367.3s
+  Epoch 2200/8000 | Train: 0.013347 | Val: 0.025589 | LR: 2.50e-04 | Time: 403.4s
+  Epoch 2400/8000 | Train: 0.010804 | Val: 0.028479 | LR: 1.25e-04 | Time: 440.0s
+  Early stopping at epoch 2581
+  Best val loss: 0.025105 @ epoch 2081
 
 [16/16] Training Configuration:
 ------------------------------------------------------------
@@ -429,18 +390,18 @@ Learning rates: [0.001, 0.0003]
   Weight decay:  1e-05
   Parameters:    1,685,708
 ------------------------------------------------------------
-  Epoch    1/8000 | Train: 5.219695 | Val: 0.364573 | LR: 3.00e-04 | Time: 0.1s
-  Epoch  200/8000 | Train: 0.033621 | Val: 0.033606 | LR: 3.00e-04 | Time: 30.7s
-  Epoch  400/8000 | Train: 0.030330 | Val: 0.031466 | LR: 3.00e-04 | Time: 61.2s
-  Epoch  600/8000 | Train: 0.027319 | Val: 0.031665 | LR: 3.00e-04 | Time: 91.9s
-  Epoch  800/8000 | Train: 0.020130 | Val: 0.028503 | LR: 3.00e-04 | Time: 121.6s
-  Epoch 1000/8000 | Train: 0.015638 | Val: 0.025995 | LR: 3.00e-04 | Time: 151.4s
-  Epoch 1200/8000 | Train: 0.013127 | Val: 0.024898 | LR: 3.00e-04 | Time: 182.1s
-  Epoch 1400/8000 | Train: 0.010991 | Val: 0.024635 | LR: 3.00e-04 | Time: 212.6s
-  Epoch 1600/8000 | Train: 0.010193 | Val: 0.024144 | LR: 3.00e-04 | Time: 245.3s
-  Epoch 1800/8000 | Train: 0.006240 | Val: 0.024587 | LR: 1.50e-04 | Time: 276.2s
-  Early stopping at epoch 1997
-  Best val loss: 0.022205 @ epoch 1497
+  Epoch    1/8000 | Train: 4.720257 | Val: 0.401348 | LR: 3.00e-04 | Time: 0.2s
+  Epoch  200/8000 | Train: 0.034186 | Val: 0.033982 | LR: 3.00e-04 | Time: 36.5s
+  Epoch  400/8000 | Train: 0.031582 | Val: 0.032465 | LR: 3.00e-04 | Time: 72.2s
+  Epoch  600/8000 | Train: 0.026300 | Val: 0.028558 | LR: 3.00e-04 | Time: 105.1s
+  Epoch  800/8000 | Train: 0.020477 | Val: 0.026627 | LR: 3.00e-04 | Time: 137.6s
+  Epoch 1000/8000 | Train: 0.015596 | Val: 0.025863 | LR: 3.00e-04 | Time: 172.2s
+  Epoch 1200/8000 | Train: 0.013260 | Val: 0.022859 | LR: 3.00e-04 | Time: 206.3s
+  Epoch 1400/8000 | Train: 0.011860 | Val: 0.027127 | LR: 3.00e-04 | Time: 241.0s
+  Epoch 1600/8000 | Train: 0.010608 | Val: 0.023546 | LR: 3.00e-04 | Time: 275.5s
+  Epoch 1800/8000 | Train: 0.006851 | Val: 0.025375 | LR: 1.50e-04 | Time: 309.6s
+  Early stopping at epoch 1912
+  Best val loss: 0.021323 @ epoch 1412
 
 ================================================================================
 HYPERPARAMETER TUNING COMPLETE
@@ -448,11 +409,11 @@ HYPERPARAMETER TUNING COMPLETE
 Best parameters:
   model_class: GaitFFTPredictor
   batch_size: 32
-  hidden_size: 256
-  learning_rate: 0.001
-  best_val_loss: 0.02158544334577538
-  best_epoch: 1076
-  total_epochs: 1576
+  hidden_size: 512
+  learning_rate: 0.0003
+  best_val_loss: 0.021154008577005903
+  best_epoch: 1226
+  total_epochs: 1726
 
 Results saved to: hyperparameter_results/
 Best model saved as: best_model_GaitFFTPredictor_*.pth
@@ -461,52 +422,69 @@ Best model saved as: best_model_GaitFFTPredictor_*.pth
 
 Top 5 configurations:
          model_class  batch_size  hidden_size  learning_rate  best_val_loss  best_epoch  total_epochs
-8   GaitFFTPredictor          32          256         0.0010       0.021585        1076          1576
-11  GaitFFTPredictor          32          512         0.0003       0.021592        1158          1658
-12  GaitFFTPredictor          64          256         0.0010       0.021980        1070          1570
-13  GaitFFTPredictor          64          256         0.0003       0.021998        1994          2494
-15  GaitFFTPredictor          64          512         0.0003       0.022205        1497          1997
+11  GaitFFTPredictor          32          512         0.0003       0.021154        1226          1726
+15  GaitFFTPredictor          64          512         0.0003       0.021323        1412          1912
+8   GaitFFTPredictor          32          256         0.0010       0.021503        1003          1503
+12  GaitFFTPredictor          64          256         0.0010       0.021784        1254          1754
+13  GaitFFTPredictor          64          256         0.0003       0.021815        1700          2200
 
 ==================================================
 Starting Testing Phase
 ==================================================
 
 Using device: cpu
+Model loaded from: hyperparameter_results\best_model_GaitFFTPredictor_hs512_lr0.0003_bs32.pth
 Loaded 1143 samples
-Model loaded from: hyperparameter_results\best_model_GaitFFTPredictor_hs256_lr0.001_bs32.pth
 
 Testing 1143 samples...
 Saving plots to: newgaitgenresults/
-  Processed 1/1143 samples | Loss: 0.001352
-  Processed 50/1143 samples | Loss: 0.004973
-  Processed 100/1143 samples | Loss: 0.000654
-  Processed 150/1143 samples | Loss: 0.008306
-  Processed 200/1143 samples | Loss: 0.012441
-  Processed 250/1143 samples | Loss: 0.000684
-  Processed 300/1143 samples | Loss: 0.001769
-  Processed 350/1143 samples | Loss: 0.001312
-  Processed 400/1143 samples | Loss: 0.000950
-  Processed 450/1143 samples | Loss: 0.010218
-  Processed 500/1143 samples | Loss: 0.001202
-  Processed 550/1143 samples | Loss: 0.001887
-  Processed 600/1143 samples | Loss: 0.001002
-  Processed 650/1143 samples | Loss: 0.000950
-  Processed 700/1143 samples | Loss: 0.000926
-  Processed 750/1143 samples | Loss: 0.014307
-  Processed 800/1143 samples | Loss: 0.001125
-  Processed 850/1143 samples | Loss: 0.002271
-  Processed 900/1143 samples | Loss: 0.003320
-  Processed 950/1143 samples | Loss: 0.001697
-  Processed 1000/1143 samples | Loss: 0.002415
-  Processed 1050/1143 samples | Loss: 0.000711
-  Processed 1100/1143 samples | Loss: 0.000595
+  Processed 1/1143 samples | Loss: 0.000658
+  Processed 50/1143 samples | Loss: 0.002130
+  Processed 100/1143 samples | Loss: 0.000626
+  Processed 150/1143 samples | Loss: 0.009407
+  Processed 200/1143 samples | Loss: 0.013926
+  Processed 250/1143 samples | Loss: 0.000506
+  Processed 300/1143 samples | Loss: 0.001348
+  Processed 350/1143 samples | Loss: 0.000976
+  Processed 400/1143 samples | Loss: 0.000406
+  Processed 450/1143 samples | Loss: 0.013080
+  Processed 500/1143 samples | Loss: 0.000687
+  Processed 550/1143 samples | Loss: 0.001590
+  Processed 600/1143 samples | Loss: 0.000133
+  Processed 650/1143 samples | Loss: 0.000689
+  Processed 450/1143 samples | Loss: 0.013080
+  Processed 500/1143 samples | Loss: 0.000687
+  Processed 550/1143 samples | Loss: 0.001590
+  Processed 600/1143 samples | Loss: 0.000133
+  Processed 650/1143 samples | Loss: 0.000689
+  Processed 500/1143 samples | Loss: 0.000687
+  Processed 550/1143 samples | Loss: 0.001590
+  Processed 600/1143 samples | Loss: 0.000133
+  Processed 650/1143 samples | Loss: 0.000689
+  Processed 550/1143 samples | Loss: 0.001590
+  Processed 600/1143 samples | Loss: 0.000133
+  Processed 650/1143 samples | Loss: 0.000689
+  Processed 600/1143 samples | Loss: 0.000133
+  Processed 650/1143 samples | Loss: 0.000689
+  Processed 650/1143 samples | Loss: 0.000689
+  Processed 700/1143 samples | Loss: 0.000996
+  Processed 750/1143 samples | Loss: 0.013332
+  Processed 750/1143 samples | Loss: 0.013332
+  Processed 800/1143 samples | Loss: 0.001014
+  Processed 800/1143 samples | Loss: 0.001014
+  Processed 850/1143 samples | Loss: 0.002204
+  Processed 850/1143 samples | Loss: 0.002204
+  Processed 900/1143 samples | Loss: 0.002072
+  Processed 950/1143 samples | Loss: 0.001524
+  Processed 1000/1143 samples | Loss: 0.001750
+  Processed 1050/1143 samples | Loss: 0.002153
+  Processed 1100/1143 samples | Loss: 0.001024
 
 ==================================================
 Testing Complete!
 ==================================================
 Samples tested: 1143
-Average MSE Loss: 0.004868 ± 0.010024
-Min Loss: 0.000092
-Max Loss: 0.106599
+Average MSE Loss: 0.003906 ± 0.009490
+Min Loss: 0.000032
+Max Loss: 0.119771
 Results saved to: newgaitgenresults/
-(base) PS C:\Users\yusuf\Bipedal-imitation-rl> 
