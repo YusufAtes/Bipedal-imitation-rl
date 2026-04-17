@@ -125,6 +125,12 @@ class BipedEnv(gym.Env):
         self.state = np.zeros(obs_dim, dtype=np.float64)
 
         self.gait_generator = gait_generator
+        if self.gait_generator is None and self.cfg.gait_generator != "fft_mlp":
+            from gait_generators import build_generator
+
+            self.gait_generator = build_generator(
+                self.cfg.gait_generator, dt=self.dt
+            )
         if self.gait_generator is None:
             self.gaitgen_net = OldSimpleFCNN()
             self.gaitgen_net.load_state_dict(

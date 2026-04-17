@@ -23,6 +23,14 @@ ObservationMode = Literal["full", "no_im_state"]
 RewardMode = Literal["full", "no_im", "gait_only"]
 DecaySchedule = Literal["none", "linear_step"]
 PolicyArch = Literal["mlp_256_256", "lstm_64_256", "lstm_256_256"]
+GaitGeneratorName = Literal[
+    "fft_mlp",
+    "raw_mocap",
+    "cubic_spline",
+    "cpg_matsuoka",
+    "rnn",
+    "amp_placeholder",
+]
 
 
 @dataclass
@@ -92,6 +100,12 @@ class BipedEnvConfig:
     imitation_weight_hip_vel: float = 0.15
     imitation_weight_knee_vel: float = 0.15
     imitation_weight_ankle_vel: float = 0.1
+
+    # B2 — swappable gait generator. When ``fft_mlp`` (default) the paper's
+    # OldSimpleFCNN is loaded via :class:`gait_generators.FFTMLPGenerator`.
+    # Other values point at the baselines registered in
+    # :mod:`gait_generators.registry`.
+    gait_generator: GaitGeneratorName = "fft_mlp"
 
     def obs_dim(self) -> int:
         """Return the dimensionality of the observation produced by this config."""
