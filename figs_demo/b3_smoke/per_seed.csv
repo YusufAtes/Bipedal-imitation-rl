@@ -1,0 +1,2 @@
+generator,seed,velocity_mse,success_rate,cost_of_transport,travel_range_m,symmetry_index
+fft_mlp,0,nan,0.0,nan,nan,nan

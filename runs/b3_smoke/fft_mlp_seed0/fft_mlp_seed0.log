@@ -1,0 +1,9 @@
+pybullet build time: Feb 22 2025 10:50:49
+Global seed set to 0 (deterministic=True)
+Model saved at step 8192 to runs\b3_smoke\fft_mlp_seed0\model_checkpoint_1fft_mlp_seed0.zip
+Time taken for this checkpoint: 36.89 seconds
+Model saved at step 16384 to runs\b3_smoke\fft_mlp_seed0\model_checkpoint_2fft_mlp_seed0.zip
+Time taken for this checkpoint: 71.96 seconds
+Training finished. Total episodes: 519
+Training complete. Models and logs are in: runs\b3_smoke\fft_mlp_seed0
+Total training time: 73.87 seconds

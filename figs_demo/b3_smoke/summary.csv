@@ -1,0 +1,2 @@
+generator,n_seeds,velocity_mse_mean,velocity_mse_ci_lo,velocity_mse_ci_hi,success_rate_mean,success_rate_ci_lo,success_rate_ci_hi,cost_of_transport_mean,cost_of_transport_ci_lo,cost_of_transport_ci_hi,travel_range_m_mean,travel_range_m_ci_lo,travel_range_m_ci_hi,symmetry_index_mean,symmetry_index_ci_lo,symmetry_index_ci_hi
+fft_mlp,1,nan,nan,nan,0.0,0.0,0.0,nan,nan,nan,nan,nan,nan,nan,nan,nan
