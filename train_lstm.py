@@ -1,182 +1,139 @@
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from stable_baselines3.common.callbacks import (
-    CheckpointCallback,
-    EvalCallback,
-    StopTrainingOnNoModelImprovement,
-    BaseCallback,
-)
-import torch
-from ppoenv_guide import BipedEnv
+"""Recurrent-PPO training driven by a YAML :mod:`biped_config.RunConfig`."""
+
+from __future__ import annotations
+
+import argparse
 import os
-import datetime
-from math import cos, pi
-from stable_baselines3.common.callbacks import BaseCallback, CallbackList
-from stable_baselines3 import PPO
 import time
-from typing import Callable
-from utils import set_global_seed
+
+import torch
 from sb3_contrib import RecurrentPPO
-set_global_seed(23)
+from stable_baselines3.common.callbacks import CallbackList
 
-t0 = time.time()
-class RewardLoggerCallback(BaseCallback):
-    def __init__(self, log_file: str, verbose: int = 0):
-        super(RewardLoggerCallback, self).__init__(verbose)
-        self.log_file = log_file
-        self.episode_rewards = []
-        self.current_episode_reward = 0
-        self.current_step = 0  # Track the number of steps in the current episode
+from biped_config import (
+    BipedEnvConfig,
+    PolicyConfig,
+    RunConfig,
+    TrainConfig,
+    load_run_config,
+    save_run_config,
+)
+from biped_env import BipedEnv
+from training_callbacks import (
+    CustomCheckpointCallback,
+    EntropyDecayCallback,
+    RewardComponentLoggerCallback,
+    RewardLoggerCallback,
+    linear_schedule,
+)
+from utils import set_global_seed
 
-        # Create the log file if it doesn't exist
-        if not os.path.exists(self.log_file):
-            with open(self.log_file, 'w') as f:
-                f.write("Episode,Total Reward,Termination Step\n")
 
-    def _on_step(self) -> bool:
-        # Check if the episode has ended
-        dones = self.locals["dones"]
-        rewards = self.locals["rewards"]
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train Recurrent PPO on BipedEnv")
+    parser.add_argument("--config", type=str, default=None)
+    parser.add_argument("--save-dir", type=str, default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    return parser.parse_args()
 
-        # Accumulate rewards for the current episode
-        self.current_episode_reward += rewards[0]
-        self.current_step += 1  # Increment step count for the current episode
 
-        # If the episode is done, log the reward and termination step
-        if dones[0]:
-            self.episode_rewards.append(self.current_episode_reward)
-            with open(self.log_file, 'a') as f:
-                f.write(f"{len(self.episode_rewards)},{self.current_episode_reward},{self.current_step}\n")
-            
-            # Reset counters for the next episode
-            self.current_episode_reward = 0
-            self.current_step = 0
-
-        return True
-    def _on_training_end(self) -> None:
-        # Optionally summarize results at the end of training
-        print("Training finished. Total episodes:", len(self.episode_rewards))
-
-class CustomCheckpointCallback(BaseCallback):
-    def __init__(self, save_freq, save_path,init_no = 0, verbose=0):
-        super(CustomCheckpointCallback, self).__init__(verbose)
-        self.save_freq = save_freq
-        self.save_path = save_path
-        self.init_no = init_no
-
-    def _on_step(self) -> bool:
-        done = False
-        # Save the model every `save_freq` steps
-        if self.n_calls % self.save_freq == 0:
-            self.init_no +=1
-            model_path = f"{self.save_path}/model_checkpoint_{self.init_no}"+checkpoint_name
-            self.model.save(model_path)
-            if self.verbose > 0:
-                print(f"Model saved at step {self.n_calls} to {model_path}")
-                print(f"Time taken for this checkpoint: {time.time() - t0:.2f} seconds")
-                time.sleep(5)
-
-        return True
-    
-def linear_schedule(initial_value: float) -> Callable[[float], float]:
-    """
-    Returns a function that computes
-    `progress_remaining * initial_value`.
-    """
-    def func(progress_remaining: float) -> float:
-        return max(progress_remaining * initial_value, 1e-4)  # Ensure a minimum value
-    return func
-
-namelist = ["ppo_256_256"]
-checkpoint_name = namelist[0]+".zip"
-reward_logger_name = namelist[0]+".csv"
-
-# ---------- Entropy‑decay callback ---------------------------------------------
-
-class EntropyDecayCallback(BaseCallback):
-    """Linearly decays `model.ent_coef` from *start* → *end*.
-    SB3 (≤2.0) stores `ent_coef` as a plain float, so scheduling must be manual.
-    """
-    def __init__(self, start: float, end: float, total_timesteps: int, verbose: int = 0):
-        super().__init__(verbose)
-        self.start = start
-        self.end = end
-        self.total = float(total_timesteps)
-
-    def _on_step(self) -> bool:
-        # progress_remaining: 1 → 0 over training
-        progress_remaining = 1.0 - self.model.num_timesteps / self.total
-        new_coef = self.end + (self.start - self.end) * progress_remaining
-        self.model.ent_coef = new_coef
-        return True
-
-# ---------- MAIN TRAINING LOOP -------------------------------------------------
-
-if __name__ == "__main__":
-    # 0) RUN IDENTIFIER ---------------------------------------------------------
-    TOTAL_TIMESTEPS = 15_000_000 # 15 million timesteps
-    SAVE_DIR = "ppo_lstm"
-    os.makedirs(SAVE_DIR, exist_ok=True)
-
-    # 1) ENVIRONMENT ------------------------------------------------------------
-    train_env = BipedEnv(render_mode=None)
-    # If you have a CurriculumWrapper defined, enable it like this:
-    # train_env = CurriculumWrapper(train_env)
-
-    # 2) CALLBACKS --------------------------------------------------------------
-    checkpoint_cb = CustomCheckpointCallback(
-        save_freq=500_000,
-        save_path=SAVE_DIR,
-        verbose=1,
-    )
-    reward_logger = RewardLoggerCallback(
-        log_file=os.path.join(SAVE_DIR, "rewards.csv")
+def _lstm_policy_kwargs(policy_cfg: PolicyConfig) -> dict:
+    activation = torch.nn.ReLU if policy_cfg.activation == "relu" else torch.nn.Tanh
+    if policy_cfg.arch == "lstm_64_256":
+        hidden = 64
+        head = dict(pi=[256], vf=[256, 256])
+    elif policy_cfg.arch == "lstm_256_256":
+        hidden = 256
+        head = dict(pi=[256], vf=[256, 256])
+    else:
+        raise ValueError(
+            f"train_lstm.py expected an LSTM arch, got {policy_cfg.arch!r}."
+        )
+    return dict(
+        lstm_hidden_size=hidden,
+        n_lstm_layers=1,
+        shared_lstm=False,
+        enable_critic_lstm=False,
+        activation_fn=activation,
+        net_arch=head,
     )
 
-    # Entropy decays linearly 1e‑3 → 0 across training
-    ENT_START = 1e-3  # initial entropy coefficient
-    ENT_END   = 1e-4  # final entropy coefficient
-    entropy_decay_cb = EntropyDecayCallback(ENT_START, ENT_END, TOTAL_TIMESTEPS)
 
-    callback_list = CallbackList([checkpoint_cb, reward_logger, entropy_decay_cb])
+def main() -> None:
+    t0 = time.time()
+    args = _parse_args()
 
+    if args.config is None:
+        cfg = RunConfig(
+            name="config2_lstm_64_256",
+            description="Configuration 2 defaults (LSTM 64-256).",
+            env=BipedEnvConfig(),
+            policy=PolicyConfig(arch="lstm_64_256"),
+            train=TrainConfig(),
+        )
+    else:
+        cfg = load_run_config(args.config)
 
+    if args.seed is not None:
+        cfg.train.seed = int(args.seed)
+
+    save_dir = args.save_dir or cfg.name
+    os.makedirs(save_dir, exist_ok=True)
+    save_run_config(cfg, os.path.join(save_dir, "config.yaml"))
+
+    set_global_seed(cfg.train.seed, deterministic=True)
+
+    train_env = BipedEnv(config=cfg.env)
+    train_env.total_train_steps = cfg.train.total_timesteps
+
+    callback_list = CallbackList(
+        [
+            CustomCheckpointCallback(
+                save_freq=cfg.train.save_freq,
+                save_path=save_dir,
+                checkpoint_name=f"{cfg.name}.zip",
+                verbose=1,
+            ),
+            RewardLoggerCallback(log_file=os.path.join(save_dir, "rewards.csv")),
+            RewardComponentLoggerCallback(
+                log_file=os.path.join(save_dir, "reward_components.csv")
+            ),
+            EntropyDecayCallback(
+                cfg.train.entropy_coef_start,
+                cfg.train.entropy_coef_end,
+                cfg.train.total_timesteps,
+            ),
+        ]
+    )
 
     model = RecurrentPPO(
-        policy="MlpLstmPolicy",            # or "CnnLstmPolicy", "MultiInputLstmPolicy"
+        policy="MlpLstmPolicy",
         env=train_env,
-        n_steps=8192,
-        batch_size=256,  # big minibatches for smoother advantages
-        n_epochs=5,
-        clip_range=0.15,  # 0.2
-        # clip_range_vf=None,
-        target_kl=0.2,  # hard KL ceiling
-
-        learning_rate=linear_schedule(3e-4),  # decay from 3e‑4 → 1e-4
-        ent_coef= ENT_START,          # no deduction constant scalar
-        
-        policy_kwargs=dict(
-            lstm_hidden_size=128,          # size of recurrent state
-            n_lstm_layers=1,               # stack more layers if needed
-            shared_lstm=False,             # separate actor/critic LSTM towers
-            enable_critic_lstm=False,       # keep critic recurrent
-            activation_fn=torch.nn.ReLU,
-            net_arch=dict(pi=[256], vf=[256,256]) 
-            # lstm_kwargs={}               # extra nn.LSTM kwargs if needed
+        n_steps=cfg.train.n_steps,
+        batch_size=cfg.train.batch_size,
+        n_epochs=cfg.train.n_epochs,
+        clip_range=cfg.train.clip_range,
+        target_kl=cfg.train.target_kl,
+        learning_rate=linear_schedule(
+            cfg.train.learning_rate, cfg.train.learning_rate_final
         ),
-        tensorboard_log=SAVE_DIR,
+        ent_coef=cfg.train.entropy_coef_start,
+        policy_kwargs=_lstm_policy_kwargs(cfg.policy),
+        tensorboard_log=save_dir,
         device="cpu",
+        seed=cfg.train.seed,
     )
     print(model.policy)
 
-    # 4) TRAIN -----------------------------------------------------------------
-
-
     model.learn(
-        total_timesteps=TOTAL_TIMESTEPS,
+        total_timesteps=cfg.train.total_timesteps,
         callback=callback_list,
     )
 
-    # 5) SAVE FINAL ARTIFACTS --------------------------------------------------
-    model.save(os.path.join(SAVE_DIR, "final_model"))
-    print(f"Training complete. Models and logs are in: {SAVE_DIR}")
-    print(f"Total training time: {time.time() - t0:.2f} seconds")       
+    model.save(os.path.join(save_dir, "final_model"))
+    print(f"Training complete. Models and logs are in: {save_dir}")
+    print(f"Total training time: {time.time() - t0:.2f} seconds")
+
+
+if __name__ == "__main__":
+    main()
