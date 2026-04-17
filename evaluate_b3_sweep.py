@@ -1,11 +1,17 @@
-"""Post-training aggregator for the B3 gait-generator sweep.
+"""Post-training aggregator for sweep directories (B3, C3, ...).
 
-Walks a sweep directory produced by :mod:`run_b3_sweep`, loads each
-``final_model.zip``, runs a fixed evaluation protocol, and emits:
+Walks a sweep directory produced by :mod:`run_b3_sweep` or
+:mod:`run_c3_sweep`, loads each ``final_model.zip``, runs a fixed evaluation
+protocol, and emits:
 
-* ``per_seed.csv``      one row per (generator, seed) with all metrics
-* ``summary.csv``       mean and 95% bootstrap CI per generator
-* ``comparison.png``    bar charts of the four headline metrics
+* ``per_seed.csv``      one row per (variant, seed) with all metrics
+* ``summary.csv``       mean and 95% bootstrap CI per variant
+* ``comparison.png``    bar charts of the five headline metrics
+
+By default runs are grouped by their *variant tag* (the ``config.name``
+with ``_seed\\d+`` stripped), which works for both B3 (grouped by gait
+generator) and C3 (grouped by reward ablation). Pass ``--group-by
+generator`` for the legacy behaviour.
 
 The evaluation protocol mirrors demo.py/``vel_diff`` but is intentionally
 lean so it can run in a couple of minutes per seed:
@@ -37,6 +43,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import re
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,9 +65,16 @@ IDX_RHIP, IDX_RKNEE, IDX_RANKLE = 4, 5, 6
 IDX_LHIP, IDX_LKNEE, IDX_LANKLE = 7, 8, 9
 
 
+_SEED_SUFFIX_RE = re.compile(r"_seed\d+$")
+
+
+def _variant_tag(run_name: str) -> str:
+    return _SEED_SUFFIX_RE.sub("", run_name)
+
+
 @dataclass
 class SeedResult:
-    generator: str
+    variant: str
     seed: int
     velocity_mse: float
     success_rate: float
@@ -122,6 +136,7 @@ def _evaluate_seed(
     speeds: np.ndarray,
     trials_per_speed: int,
     episode_seconds: float,
+    group_by: str,
 ) -> SeedResult | None:
     model_path = run_dir / "final_model.zip"
     cfg_path = run_dir / "config.yaml"
@@ -129,7 +144,10 @@ def _evaluate_seed(
         print(f"[b3-eval] SKIP {run_dir.name} (missing config/final_model)")
         return None
     cfg = load_run_config(cfg_path)
-    generator = cfg.env.gait_generator
+    if group_by == "generator":
+        variant = cfg.env.gait_generator
+    else:  # "variant" (default): strip _seedN suffix
+        variant = _variant_tag(cfg.name or run_dir.name)
     seed = int(cfg.train.seed)
 
     env = BipedEnv(config=cfg.env, demo_mode=True, demo_type="vel_diff")
@@ -156,7 +174,7 @@ def _evaluate_seed(
     env.close()
 
     return SeedResult(
-        generator=generator,
+        variant=variant,
         seed=seed,
         velocity_mse=float(np.mean(vel_err_sq)) if vel_err_sq else float("nan"),
         success_rate=float(np.mean(successes)) if successes else float("nan"),
@@ -185,9 +203,9 @@ def _write_per_seed(rows: list[SeedResult], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fp:
         w = csv.writer(fp)
-        w.writerow(["generator", "seed", *METRICS])
+        w.writerow(["variant", "seed", *METRICS])
         for r in rows:
-            w.writerow([r.generator, r.seed, *[getattr(r, m) for m in METRICS]])
+            w.writerow([r.variant, r.seed, *[getattr(r, m) for m in METRICS]])
 
 
 def _safe_nanmean(arr: np.ndarray) -> float:
@@ -199,18 +217,18 @@ def _safe_nanmean(arr: np.ndarray) -> float:
 
 
 def _write_summary(rows: list[SeedResult], path: Path) -> None:
-    by_gen: dict[str, list[SeedResult]] = {}
+    by_variant: dict[str, list[SeedResult]] = {}
     for r in rows:
-        by_gen.setdefault(r.generator, []).append(r)
+        by_variant.setdefault(r.variant, []).append(r)
     path.parent.mkdir(parents=True, exist_ok=True)
-    header: list[str] = ["generator", "n_seeds"]
+    header: list[str] = ["variant", "n_seeds"]
     for m in METRICS:
         header += [f"{m}_mean", f"{m}_ci_lo", f"{m}_ci_hi"]
     with path.open("w", newline="", encoding="utf-8") as fp:
         w = csv.writer(fp)
         w.writerow(header)
-        for gen, items in sorted(by_gen.items()):
-            row: list[object] = [gen, len(items)]
+        for variant, items in sorted(by_variant.items()):
+            row: list[object] = [variant, len(items)]
             for m in METRICS:
                 arr = np.array([getattr(it, m) for it in items], dtype=np.float64)
                 mean = _safe_nanmean(arr)
@@ -219,27 +237,28 @@ def _write_summary(rows: list[SeedResult], path: Path) -> None:
             w.writerow(row)
 
 
-def _plot_comparison(rows: list[SeedResult], out: Path) -> None:
-    by_gen: dict[str, list[SeedResult]] = {}
+def _plot_comparison(rows: list[SeedResult], out: Path, title: str) -> None:
+    by_variant: dict[str, list[SeedResult]] = {}
     for r in rows:
-        by_gen.setdefault(r.generator, []).append(r)
-    gens = sorted(by_gen.keys())
-    if not gens:
+        by_variant.setdefault(r.variant, []).append(r)
+    variants = sorted(by_variant.keys())
+    if not variants:
         return
     fig, axes = plt.subplots(1, len(METRICS), figsize=(4 * len(METRICS), 4))
     if len(METRICS) == 1:
         axes = [axes]
+    palette = ["#4c72b0", "#dd8452", "#55a467", "#c44e52", "#8172b2", "#937860", "#b47cc7"]
     for ax, m in zip(axes, METRICS):
-        means = [_safe_nanmean(np.asarray([getattr(it, m) for it in by_gen[g]], dtype=np.float64)) for g in gens]
+        means = [_safe_nanmean(np.asarray([getattr(it, m) for it in by_variant[v]], dtype=np.float64)) for v in variants]
         stds = []
-        for g in gens:
-            arr = np.asarray([getattr(it, m) for it in by_gen[g]], dtype=np.float64)
+        for v in variants:
+            arr = np.asarray([getattr(it, m) for it in by_variant[v]], dtype=np.float64)
             arr = arr[np.isfinite(arr)]
             stds.append(float(np.std(arr)) if arr.size > 0 else 0.0)
-        ax.bar(gens, means, yerr=stds, capsize=4, color=["#4c72b0", "#dd8452", "#55a467", "#c44e52", "#8172b2", "#937860"][: len(gens)])
+        ax.bar(variants, means, yerr=stds, capsize=4, color=palette[: len(variants)])
         ax.set_title(m)
         ax.tick_params(axis="x", rotation=30)
-    fig.suptitle("B3: gait-generator comparison (mean +- std across seeds)")
+    fig.suptitle(title)
     fig.tight_layout()
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150)
@@ -254,6 +273,13 @@ def _parse_args() -> argparse.Namespace:
                    help="Commanded speeds. Default: np.linspace(0.3, 2.0, 9)")
     p.add_argument("--trials-per-speed", type=int, default=3)
     p.add_argument("--episode-seconds", type=float, default=4.0)
+    p.add_argument(
+        "--group-by", choices=["variant", "generator"], default="variant",
+        help="'variant' (default) groups by config.name minus _seedN; "
+             "'generator' groups by cfg.env.gait_generator (legacy B3 behaviour).",
+    )
+    p.add_argument("--title", type=str, default=None,
+                   help="Title for the comparison PNG.")
     return p.parse_args()
 
 
@@ -266,24 +292,26 @@ def main() -> int:
     )
     run_dirs = sorted(p for p in args.sweep_root.iterdir() if p.is_dir())
     if not run_dirs:
-        print(f"[b3-eval] no run dirs under {args.sweep_root}")
+        print(f"[sweep-eval] no run dirs under {args.sweep_root}")
         return 1
 
     results: list[SeedResult] = []
     for rd in run_dirs:
-        print(f"[b3-eval] evaluating {rd.name}")
-        res = _evaluate_seed(rd, speeds, args.trials_per_speed, args.episode_seconds)
+        print(f"[sweep-eval] evaluating {rd.name}")
+        res = _evaluate_seed(rd, speeds, args.trials_per_speed,
+                             args.episode_seconds, args.group_by)
         if res is not None:
             results.append(res)
 
     if not results:
-        print("[b3-eval] nothing evaluated (no final_model.zip found).")
+        print("[sweep-eval] nothing evaluated (no final_model.zip found).")
         return 1
 
+    title = args.title or f"Sweep comparison ({args.sweep_root}) mean +- std"
     _write_per_seed(results, args.out / "per_seed.csv")
     _write_summary(results, args.out / "summary.csv")
-    _plot_comparison(results, args.out / "comparison.png")
-    print(f"[b3-eval] wrote {args.out}/per_seed.csv, summary.csv, comparison.png")
+    _plot_comparison(results, args.out / "comparison.png", title)
+    print(f"[sweep-eval] wrote {args.out}/per_seed.csv, summary.csv, comparison.png")
     return 0
 
 
