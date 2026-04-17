@@ -155,6 +155,8 @@ class BipedEnv(gym.Env):
         self._motor_delay_steps = 0
         self._motor_delay_buffer: list[np.ndarray] = []
         self._encoder_noise_std = 0.0
+        self._friction = 1.0
+        self._foot_mass_scale = 1.0
 
         # A4 — populated by step(), consumed by the per-component reward logger.
         self.last_reward_components: dict[str, float] = {}
@@ -630,6 +632,7 @@ class BipedEnv(gym.Env):
             forces=[0, 0, 0, 0, 0, 0, 0, 0, 0],
             physicsClientId=self.physics_client,
         )
+        self._apply_foot_mass_scale()
         if not self.demo_mode and self.cfg.rsi:
             for idx, val in zip(
                 [3, 4, 5, 6, 7, 8],
@@ -984,14 +987,31 @@ class BipedEnv(gym.Env):
             self._friction = 1.0
             self._motor_delay_steps = 0
             self._encoder_noise_std = 0.0
+            self._foot_mass_scale = 1.0
             return
         self._friction = float(np.random.uniform(*dr.friction_range))
         self._motor_delay_steps = int(
             np.round(np.random.uniform(*dr.motor_delay_ms_range))
         )
         self._encoder_noise_std = dr.encoder_noise_std
-        # Foot mass is applied after the robot is loaded in _init_state.
+        # Foot mass is applied after the robot is loaded in _init_state via
+        # :meth:`_apply_foot_mass_scale`.
         self._foot_mass_scale = float(np.random.uniform(*dr.foot_mass_scale_range))
+
+    def _apply_foot_mass_scale(self) -> None:
+        """Scale the mass of each foot link by ``self._foot_mass_scale``."""
+        if abs(self._foot_mass_scale - 1.0) < 1e-9:
+            return
+        for link in (_RIGHT_FOOT_LINK, _LEFT_FOOT_LINK):
+            info = self.p.getDynamicsInfo(
+                self.robot, link, physicsClientId=self.physics_client
+            )
+            new_mass = float(info[0]) * self._foot_mass_scale
+            self.p.changeDynamics(
+                self.robot, link,
+                mass=new_mass,
+                physicsClientId=self.physics_client,
+            )
 
     def _maybe_delay_motor(self, action: np.ndarray) -> np.ndarray:
         if self._motor_delay_steps <= 0:
