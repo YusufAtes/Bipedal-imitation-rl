@@ -45,7 +45,7 @@ DEFAULT_ABLATIONS: tuple[str, ...] = (
     "rgait_no_torque",
 )
 
-DEFAULT_SEEDS: tuple[int, ...] = (0, 1, 2)
+DEFAULT_SEEDS: tuple[int, ...] = (0, 1, 2, 3, 4)
 
 
 def _base_yaml(name: str) -> Path:
