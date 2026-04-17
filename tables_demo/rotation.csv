@@ -1,0 +1,9 @@
+config,metric,mean,ci_lo,ci_hi,n
+alpha=0.25,success rate,0.8525345622119815,0.8248847926267281,0.880184331797235,651
+alpha=0.25,max range (m),,,,0
+alpha=0.5,success rate,0.9615975422427036,0.946236559139785,0.9754224270353302,651
+alpha=0.5,max range (m),,,,0
+no decay,success rate,0.9231950844854071,0.901689708141321,0.9431643625192012,651
+no decay,max range (m),,,,0
+no imitation,success rate,0.9508448540706606,0.9339477726574501,0.9662058371735791,651
+no imitation,max range (m),,,,0
