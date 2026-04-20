@@ -8,9 +8,25 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # Needed for 3D plotting
-import plot_utils
 from utils import set_global_seed
 from scipy.signal import butter, filtfilt
+
+# Symmetry index for one left/right signal pair (in %).
+def calc_pair_symmetry_index(right_signal, left_signal, eps=1e-6):
+    right_signal = np.asarray(right_signal, dtype=np.float64)
+    left_signal = np.asarray(left_signal, dtype=np.float64)
+    if right_signal.size == 0 or left_signal.size == 0:
+        return np.nan
+    denom = 0.5 * (np.abs(right_signal) + np.abs(left_signal)) + eps
+    pair_si = np.abs(right_signal - left_signal) / denom * 100.0
+    return float(np.mean(pair_si))
+
+
+def calc_episode_symmetry_index(rhip, rknee, rankle, lhip, lknee, lankle):
+    hip_si = calc_pair_symmetry_index(rhip, lhip)
+    knee_si = calc_pair_symmetry_index(rknee, lknee)
+    ankle_si = calc_pair_symmetry_index(rankle, lankle)
+    return float(np.nanmean([hip_si, knee_si, ankle_si]))
 
 #INSTEAD OF SUCCES RATE ADD HOW MANY METERS IT TRAVELED
 def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
@@ -24,7 +40,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
     noise_levels = np.arange(1,20,1)
     gammas = [0.25, 0.5, 1.0, 2.0]  # Different resolutions for the ground
     record_data = pd.DataFrame(columns=["demo type", "cmd speed", "angle", "mean speed","noise level",
-                                        "resolution","success","max range","trial_no"])
+                                        "resolution","success","max range","trial_no","symmetry index"])
     if demo_type == "noisy":
         env = BipedEnv(demo_mode=True, demo_type=demo_type, render_mode= None)
         model = PPO.load(os.path.join(ppo_path,ppo_file),device='cpu',deterministic=True)
@@ -42,7 +58,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                 # Scenario count is always 1 (this for loop is just for future use)
                 for scenario in range(scenario_count):
                     # Generate heightfield data with noise in the range [-ground_noise, ground_noise]
-                    heightfield_data = np.load(f"noise_planes/plane_{gamma}_{scenario_mode}.npy")
+                    heightfield_data = np.load(f"noise_planes/plane_step_{gamma}_{scenario_mode}.npy")
                     heightfield_data = heightfield_data * noise_level
                     
                     for speed_no in range(len(speeds)):
@@ -613,6 +629,7 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         actual_speeds = np.zeros((len(speed_range)))
 
         desired_speed = speed_range[0]
+        desired_speed = 1.2
         angle = 0.0
 
         total_rew = 0
@@ -654,10 +671,10 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
                     current_time.append(0.0)
 
                 previous_place = env.return_external_state()[1]
-                desired_speed = speed_range[int(i/change_interval)]
+                # desired_speed = speed_range[int(i/change_interval)]
                 env.change_ref_speed(desired_speed)
 
-            if i % 10 == 0:
+            if i % 3 == 0:
                 speed_text = f"Desired Speed: {desired_speed:.2f} m/s"
                 img = env.get_follow_camera_image(overlay_text=speed_text)
                 frames.append(np.array(img))
@@ -678,7 +695,111 @@ def made_demo(scenario_mode=0,speed_len=10,angle_len = 45,episode_len=4,
         plt.grid()
         plt.savefig(os.path.join(ppo_path, f"demo_velocity_track.png"))
         plt.close()
-        imageio.mimsave("biped_follow_mlp.mp4", frames, fps=30)
+        imageio.mimsave("biped_1.2.mp4", frames, fps=30)
+
+    elif demo_type == "symmetry_index":
+        t0 = time.time()
+        env = BipedEnv(demo_mode=True, demo_type=demo_type, render_mode=None)
+        model = PPO.load(os.path.join(ppo_path, ppo_file), device='cpu', deterministic=True)
+        model.set_env(env)
+
+        speed_range = np.linspace(0.1, 2.1, 41)  # same sweep as velocity comparison demo
+        angle = 0.0  # flat ground
+        trial_no = 5
+        symmetry_vs_speed = np.zeros(len(speed_range))
+
+        for speed_no in range(len(speed_range)):
+            desired_speed = speed_range[speed_no]
+            trial_symmetry = []
+
+            for trial in range(trial_no):
+                success = True
+                dt = 1e-3  # default of pybullet
+                max_steps = int(episode_len * (1 / dt))
+                gait_steps = int( (1 / (10* dt)))
+                episode_start = True
+                lstm_states = None
+
+                obs, info = env.reset(test_speed=desired_speed, test_angle=angle, demo_max_steps=max_steps)
+                terminated = False
+
+                rhip_posses = []
+                rknee_posses = []
+                rankle_posses = []
+                lhip_posses = []
+                lknee_posses = []
+                lankle_posses = []
+                prev_phase = True
+                right_phase_found = False
+                left_phase_found = False
+                for i in range(0, int(max_steps / 10)):
+                    if ppo_type == "lstm":
+                        action, lstm_states = model.predict(obs, state=lstm_states, episode_start=episode_start)
+                        episode_start = False
+                    else:
+                        action, _states = model.predict(obs)
+
+                    obs, rewards, dones, truncated, info = env.step(action)
+                    if env.right_swing and prev_phase and not right_phase_found:
+                        right_start = i
+                        right_phase_found = True
+                        print(f"right phase start: {i}")
+                    if env.left_swing and prev_phase and not left_phase_found:
+                        left_start = i
+                        left_phase_found = True
+                        print(f"left phase start: {i}")
+                    if dones:
+                        success = False
+                        terminated = True
+                        break
+
+                    # Joint indices requested by user:
+                    # right hip=7, right knee=8, right ankle=9,
+                    # left hip=10, left knee=11, left ankle=12
+                    rhip_posses.append(obs[7])
+                    rknee_posses.append(obs[8])
+                    rankle_posses.append(obs[9])
+                    lhip_posses.append(obs[10])
+                    lknee_posses.append(obs[11])
+                    lankle_posses.append(obs[12])
+
+                if success and len(rhip_posses) > 0:
+                    symmetry_index = calc_episode_symmetry_index(
+                        rhip_posses[right_start:right_start+gait_steps], rknee_posses[right_start:right_start+gait_steps],
+                        rankle_posses[right_start:right_start+gait_steps],lhip_posses[left_start:left_start+gait_steps], 
+                        lknee_posses[left_start:left_start+gait_steps], lankle_posses[left_start:left_start+gait_steps])
+                    trial_symmetry.append(symmetry_index)
+                else:
+                    symmetry_index = np.nan
+
+                record_data = pd.concat([record_data, pd.DataFrame([{
+                    "demo type": demo_type,
+                    "cmd speed": desired_speed,
+                    "angle": angle,
+                    "mean speed": None,
+                    "noise level": None,
+                    "resolution": None,
+                    "success": success,
+                    "max range": None,
+                    "trial_no": trial,
+                    "steps taken": env.return_step_taken(),
+                    "symmetry index": symmetry_index
+                }])], ignore_index=True)
+
+            symmetry_vs_speed[speed_no] = np.nanmean(trial_symmetry) if len(trial_symmetry) > 0 else np.nan
+
+            if speed_no % 8 == 0:
+                print(f'{speed_no + 1}/{len(speed_range)} speeds done for symmetry demo')
+                print(f"Elapsed: {time.time() - t0:.2f} seconds")
+
+        plt.figure(figsize=(8, 6))
+        plt.plot(speed_range, symmetry_vs_speed, marker='o')
+        plt.title('Commanded Speed vs Symmetry Index (Flat Ground)')
+        plt.xlabel("Commanded Speed (m/s)")
+        plt.ylabel("Symmetry Index (%)")
+        plt.grid(True)
+        plt.savefig(os.path.join(ppo_path, "demo_symmetry_index.png"))
+        plt.close()
 
 
     elif demo_type == "joint_comparison":
@@ -766,7 +887,7 @@ if __name__ == "__main__":
 
     ppo_type = "mlp"                # "lstm" or "mlp"
     demo_type = "vel_diff"          # "rotation" or "noisy"
-    ppo_path = "configurations/nodecay_mlp_rsi/PPO_39"
+    ppo_path = r"C:\Users\bates\Desktop\Bipedal-imitation-rl\configurations\nodecay_mlp_norsi\PPO_43"
     ppo_file = "final_model.zip"
 
     scenario_mode = 0
@@ -790,14 +911,25 @@ if __name__ == "__main__":
     print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
 
     t0 = time.time()
-    demo_type = "rotation"
+    demo_type = "symmetry_index"
     made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
                 avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
                 floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
                 demo_type=demo_type,ppo_type=ppo_type)
     
-    print("Rotation demo done, starting noisy demo now...")
-    print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
+    print("Symetry index demo done, starting rotation demo now...")
+    print("Time taken for Symetry index demo: {:.2f} seconds".format(time.time() - t0))
+
+
+    # t0 = time.time()
+    # demo_type = "rotation"
+    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+    #             demo_type=demo_type,ppo_type=ppo_type)
+    
+    # print("Rotation demo done, starting noisy demo now...")
+    # print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
 
     t0 = time.time()
     demo_type = "noisy"
@@ -810,22 +942,22 @@ if __name__ == "__main__":
     print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
 
 
-    t0 = time.time()
-    scenario_mode = 1
-    demo_type = "noisy"
+    # t0 = time.time()
+    # scenario_mode = 1
+    # demo_type = "noisy"
 
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
-    print(f"Noisy demo {scenario_mode} done!")
-    print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+    #             demo_type=demo_type,ppo_type=ppo_type)
+    # print(f"Noisy demo {scenario_mode} done!")
+    # print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
 
-    t0 = time.time()
-    demo_type = "track"
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
-    print("Track demo done!")
-    print("Time taken for track demo: {:.2f} seconds".format(time.time() - t0))
+    # t0 = time.time()
+    # demo_type = "track"
+    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+    #             demo_type=demo_type,ppo_type=ppo_type)
+    # print("Track demo done!")
+    # print("Time taken for track demo: {:.2f} seconds".format(time.time() - t0))

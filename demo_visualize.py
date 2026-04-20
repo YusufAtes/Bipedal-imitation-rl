@@ -1,4 +1,4 @@
-from ppo_demoenv import BipedEnv
+from ppoenv_guide import BipedEnv
 import os
 import numpy as np
 from stable_baselines3 import PPO
@@ -6,9 +6,9 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ppo_path = "configurations/nodecay_mlp_rsi/PPO_39"
+ppo_path = r"C:\Users\bates\Desktop\Bipedal-imitation-rl\configurations\noimreward_mlp\PPO_45"
 env = BipedEnv(demo_mode=True,render_mode="human")
-ppo_file = "model_checkpoint_29ppo_256_256.zip"
+ppo_file = "final_model.zip"
 # ppo_file = "final_model.zip"
 
 demo_type = "mlp"
@@ -45,7 +45,7 @@ max_speed = 0
 episode_len = 5
 
 total_rew = 0
-ground_noise = 7
+ground_noise = 0
 gamma = 0.5
 case_no = 5
 
@@ -55,7 +55,7 @@ for current_no in range(case_no):
     past_lhip = []
     total_attempts += 1
     succes = True
-    test_speed = 1.5
+    test_speed = 2.0
     test_angle = 0.0
 
     episode_start = True

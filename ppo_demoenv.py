@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import resample
 import torch
-from gait_generator_net import SimpleFCNN
+from gait_generator_net import OldSimpleFCNN
 import gymnasium as gym
 from gymnasium import spaces
 import pybullet_data
@@ -37,7 +37,7 @@ class BipedEnv(gym.Env):
         self.observation_space = spaces.Box(low=-100, high=100, shape=(58,), dtype=np.float32)
 
         self.t = 0
-        self.gaitgen_net = SimpleFCNN()
+        self.gaitgen_net = OldSimpleFCNN()
         self.gaitgen_net.load_state_dict(torch.load('final_model.pth',weights_only=True))
         
         self.normalizationconst = np.load(rf"newnormalization_constants.npy")
@@ -75,7 +75,7 @@ class BipedEnv(gym.Env):
             self.p.setPhysicsEngineParameter(enableFileCaching=0) # Prevents reading from disk, which can have timing issues
 
 
-        speed_limit = 2.2 #np.clip(self.step_counter/3_500_000,0,1.9) + 0.7
+        speed_limit = 2.4 #np.clip(self.step_counter/3_500_000,0,1.9) + 0.7
         ramp_Limit = 5 #np.clip(self.step_counter/1_200_000,0,5)
 
         self.reference_speed = np.random.uniform(0.2,speed_limit)
@@ -162,10 +162,16 @@ class BipedEnv(gym.Env):
         return self.state, reward, done, truncated, self.state_info
 
     def biped_reward(self,x,torques):
+        if self.step_counter % 100_000 == 0:
+            print(self.step_counter)
 
-        alpha_coeff = 0 #0.25*(self.step_counter / 15_000_000)
-        self.imitation_weight = 1.0 -  alpha_coeff
-        self.gait_weight = 1.0 + alpha_coeff
+        if self.reference_speed > 1.2:
+            imitation_decay = np.exp(-0.5 * (self.reference_speed-1.2))
+        else:
+            imitation_decay = 1.0
+        # alpha_coeff = 0.25*(self.step_counter / 15_000_000)
+        self.imitation_weight = imitation_decay
+        self.gait_weight = (1/imitation_decay)
 
         self.imitation_weight_hip_pos = 0.75
         self.imitation_weight_knee_pos = 0.75
@@ -369,52 +375,75 @@ class BipedEnv(gym.Env):
         hip_short = upper_len - (upper_len * np.cos(hip_init) )
         knee_short = lower_len - (lower_len * np.cos(knee_init))
         foot_exten = foot_len * np.sin(np.abs(ankle_init))
-        init_pos = 1.185 - hip_short - knee_short 
+        init_pos = 1.195 - hip_short - knee_short 
 
         return init_pos
     
 
     def init_state(self):
+        if self.demo_mode == False:
 
-        start_idx = 0
+            start_idx = np.random.randint(0,500)
 
-        # self.max_steps = self.max_steps - start_idx
-        self.reference_idx = start_idx
+            # self.max_steps = self.max_steps - start_idx
+            self.reference_idx = start_idx
 
-        rhip_pos = self.reference[start_idx,0]
-        rknee_pos = self.reference[start_idx,1]
-        rankle_pos = self.reference[start_idx,2]
-        lhip_pos = self.reference[start_idx,3]
-        lknee_pos = self.reference[start_idx,4]
-        lankle_pos = self.reference[start_idx,5]
-        
-        if np.abs(rhip_pos) > np.abs(lhip_pos):
-            hip_init = lhip_pos
+            rhip_pos = self.reference[start_idx,0]
+            rknee_pos = self.reference[start_idx,1]
+            rankle_pos = self.reference[start_idx,2]
+            lhip_pos = self.reference[start_idx,3]
+            lknee_pos = self.reference[start_idx,4]
+            lankle_pos = self.reference[start_idx,5]
+            
+            if np.abs(rhip_pos) > np.abs(lhip_pos):
+                hip_init = lhip_pos
+            else:
+                hip_init = rhip_pos
+
+            if np.abs(rknee_pos) > np.abs(lknee_pos):
+                knee_init = lknee_pos
+            else:
+                knee_init = rknee_pos
+
+            if np.abs(rankle_pos) < np.abs(lankle_pos):
+                ankle_init = lankle_pos
+            else:
+                ankle_init = rankle_pos
+
+            init_z = self.starting_height(hip_init,knee_init,ankle_init)
+            del self.robot
+            self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,init_z + 0.02], self.p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
+            self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0],physicsClientId=self.physics_client)
+
+            self.p.resetJointState(self.robot, 3, targetValue = rhip_pos,physicsClientId=self.physics_client) 
+            self.p.resetJointState(self.robot, 4, targetValue = rknee_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 5, targetValue = rankle_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 6, targetValue = lhip_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 7, targetValue = lknee_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 8, targetValue = lankle_pos,physicsClientId=self.physics_client)
         else:
-            hip_init = rhip_pos
+            start_idx = 0
+            self.reference_idx = start_idx
 
-        if np.abs(rknee_pos) > np.abs(lknee_pos):
-            knee_init = lknee_pos
-        else:
-            knee_init = rknee_pos
+            rhip_pos = 0.0
+            rknee_pos = 0.0
+            rankle_pos = 0.0
+            lhip_pos = 0.0
+            lknee_pos = 0.0
+            lankle_pos = 0.0
+            
 
-        if np.abs(rankle_pos) < np.abs(lankle_pos):
-            ankle_init = lankle_pos
-        else:
-            ankle_init = rankle_pos
+            init_z = self.starting_height(rhip_pos,lhip_pos,rankle_pos)
+            del self.robot
+            self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,1.185], self.p.getQuaternionFromEuler([0.,0.,0.]))
+            self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0],physicsClientId=self.physics_client)
 
-        init_z = self.starting_height(hip_init,knee_init,ankle_init)
-        del self.robot
-        self.robot = self.p.loadURDF("assets/biped2d.urdf", [0,0,init_z], self.p.getQuaternionFromEuler([0.,0.,0.]),physicsClientId=self.physics_client)
-        self.p.setJointMotorControlArray(self.robot,[0,1,2,3,4,5,6,7,8], self.p.VELOCITY_CONTROL, forces=[0,0,0,0,0,0,0,0,0],physicsClientId=self.physics_client)
-
-        self.p.resetJointState(self.robot, 3, targetValue = rhip_pos,physicsClientId=self.physics_client) 
-        self.p.resetJointState(self.robot, 4, targetValue = rknee_pos,physicsClientId=self.physics_client)
-        self.p.resetJointState(self.robot, 5, targetValue = rankle_pos,physicsClientId=self.physics_client)
-        self.p.resetJointState(self.robot, 6, targetValue = lhip_pos,physicsClientId=self.physics_client)
-        self.p.resetJointState(self.robot, 7, targetValue = lknee_pos,physicsClientId=self.physics_client)
-        self.p.resetJointState(self.robot, 8, targetValue = lankle_pos,physicsClientId=self.physics_client)
-
+            self.p.resetJointState(self.robot, 3, targetValue = rhip_pos,physicsClientId=self.physics_client) 
+            self.p.resetJointState(self.robot, 4, targetValue = rknee_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 5, targetValue = rankle_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 6, targetValue = lhip_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 7, targetValue = lknee_pos,physicsClientId=self.physics_client)
+            self.p.resetJointState(self.robot, 8, targetValue = lankle_pos,physicsClientId=self.physics_client)
 
         self.p.setGravity(0,0,-9.81,physicsClientId=self.physics_client)
         self.p.setTimeStep(self.dt,physicsClientId=self.physics_client)
@@ -465,6 +494,7 @@ class BipedEnv(gym.Env):
         self.state[2] = 0
         self.state[3] = 0
         self.state[4] = 0
+        
         self.past_forward_place = self.external_states[1]
         self.external_states = [pos_x,pos_y,pos_z,roll]
 
@@ -675,7 +705,3 @@ class BipedEnv(gym.Env):
 
     def return_step_taken(self):
         return self.taken_step_counter
-    
-
-    def return_left_right_swing(self):
-        return self.left_swing, self.right_swing
