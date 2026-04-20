@@ -11,7 +11,7 @@ from .cubic_spline import CubicSplineGenerator
 from .fft_mlp import FFTMLPGenerator
 from .raw_mocap import RawMocapGenerator
 from .rnn_generator import RNNGenerator
-
+from .fft_mlp_review import FFTMLPReviewGenerator
 
 GENERATORS: Dict[str, Callable[..., BaseGaitGenerator]] = {
     FFTMLPGenerator.name: FFTMLPGenerator,
@@ -20,6 +20,7 @@ GENERATORS: Dict[str, Callable[..., BaseGaitGenerator]] = {
     CPGMatsuokaGenerator.name: CPGMatsuokaGenerator,
     RNNGenerator.name: RNNGenerator,
     AMPPlaceholderGenerator.name: AMPPlaceholderGenerator,
+    FFTMLPReviewGenerator.name: FFTMLPReviewGenerator,
 }
 
 
