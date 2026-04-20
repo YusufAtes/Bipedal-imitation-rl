@@ -1,0 +1,52 @@
+name: cubic_spline_seed4
+description: 'B3 sweep: gen_cubic_spline.yaml seed=4'
+env:
+  observation: full
+  reward: full
+  rsi: true
+  decay_schedule: none
+  decay_alpha: 0.0
+  dt: 0.001
+  speed_limit: 2.2
+  ramp_limit_deg: 5.0
+  max_episode_seconds: 3.0
+  include_pad_dims: false
+  dr:
+    enabled: false
+    friction_range:
+    - 1.0
+    - 1.0
+    foot_mass_scale_range:
+    - 1.0
+    - 1.0
+    motor_delay_ms_range:
+    - 0.0
+    - 0.0
+    encoder_noise_std: 0.0
+  alive_weight: 0.5
+  contact_weight: 0.6
+  speed_weight: 0.6
+  torque_weight: 0.001
+  imitation_weight_hip_pos: 0.75
+  imitation_weight_knee_pos: 0.75
+  imitation_weight_ankle_pos: 0.25
+  imitation_weight_hip_vel: 0.15
+  imitation_weight_knee_vel: 0.15
+  imitation_weight_ankle_vel: 0.1
+  gait_generator: cubic_spline
+policy:
+  arch: mlp_256_256
+  activation: relu
+train:
+  total_timesteps: 15000000
+  n_steps: 8192
+  batch_size: 256
+  n_epochs: 5
+  clip_range: 0.15
+  target_kl: 0.2
+  learning_rate: 0.0003
+  learning_rate_final: 0.0001
+  entropy_coef_start: 0.001
+  entropy_coef_end: 0.0001
+  save_freq: 500000
+  seed: 4

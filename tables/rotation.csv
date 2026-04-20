@@ -1,0 +1,7 @@
+config,metric,mean,ci_lo,ci_hi,n
+$\alpha = 0.5$,success rate,0.8310291858678955,0.8033794162826421,0.8602150537634409,651
+$\alpha = 0.5$,max range (m),,,,0
+no decay,success rate,0.967741935483871,0.9523809523809523,0.9800307219662059,651
+no decay,max range (m),,,,0
+no imitation (baseline),success rate,0.9093701996927803,0.8863287250384024,0.9308755760368663,651
+no imitation (baseline),max range (m),,,,0

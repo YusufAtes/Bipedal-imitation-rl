@@ -1,0 +1,36 @@
+### Velocity-tracking demo -- per-config metrics with 95\% bootstrap CIs.
+
+| config | metric | mean | 95% CI | n |
+|---|---|---|---|---|
+| $\alpha = 0.5$ | velocity MSE (m^2/s^2) | 0.0186 | [0.01083, 0.02807] | 41 |
+| $\alpha = 0.5$ | success rate | 0.9756 | [0.9268, 1] | 41 |
+| no decay | velocity MSE (m^2/s^2) | 0.01795 | [0.01154, 0.0251] | 41 |
+| no decay | success rate | 1 | [1, 1] | 41 |
+| no imitation (baseline) | velocity MSE (m^2/s^2) | 0.003428 | [0.002161, 0.004795] | 41 |
+| no imitation (baseline) | success rate | 1 | [1, 1] | 41 |
+
+### Rotation / ramp demo -- per-config metrics with 95\% bootstrap CIs.
+
+| config | metric | mean | 95% CI | n |
+|---|---|---|---|---|
+| $\alpha = 0.5$ | success rate | 0.831 | [0.8034, 0.8602] | 651 |
+| $\alpha = 0.5$ | max range (m) | nan | n/a | 0 |
+| no decay | success rate | 0.9677 | [0.9524, 0.98] | 651 |
+| no decay | max range (m) | nan | n/a | 0 |
+| no imitation (baseline) | success rate | 0.9094 | [0.8863, 0.9309] | 651 |
+| no imitation (baseline) | max range (m) | nan | n/a | 0 |
+
+### Step-plane noisy-terrain demo -- per-config metrics with 95\% bootstrap CIs.
+
+| config | metric | mean | 95% CI | n |
+|---|---|---|---|---|
+| $\alpha = 0.5$ | success rate | 0.5317 | [0.5077, 0.5551] | 1596 |
+| $\alpha = 0.5$ | max range (m) | 4.756 | [4.514, 4.99] | 1596 |
+| no decay | success rate | 0.4724 | [0.4484, 0.4967] | 1596 |
+| no decay | max range (m) | 4.844 | [4.601, 5.083] | 1596 |
+| no imitation (baseline) | success rate | 0.4442 | [0.419, 0.4683] | 1596 |
+| no imitation (baseline) | max range (m) | 4.809 | [4.571, 5.044] | 1596 |
+
+### Velocity-tracking (profile) demo -- per-config metrics with 95\% bootstrap CIs.
+
+_(no data)_
