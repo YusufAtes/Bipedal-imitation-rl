@@ -59,7 +59,7 @@ from gait_generators.cubic_spline import CubicSplineGenerator
 
 
 # Generators evaluated in the fair protocol. Order dictates legend order.
-GENERATOR_NAMES = ("fft_mlp_review", "raw_mocap", "cubic_spline", "cpg_matsuoka")
+GENERATOR_NAMES = ("fft_mlp", "fft_mlp_review", "raw_mocap", "cubic_spline", "cpg_matsuoka")
 
 SPLIT_PATH = Path("gait reference phase 2") / "split_indices.npz"
 
@@ -141,7 +141,9 @@ def build_fair_generators(train_idx: np.ndarray) -> dict[str, object]:
     gens["fft_mlp_review"] = build_generator(
         "fft_mlp_review", dt=1e-3, tile_repeats=1
     )
-
+    gens["fft_mlp"] = build_generator(
+        "fft_mlp", dt=1e-3, tile_repeats=1
+    )
     # -- raw_mocap: load full corpus, then filter in-place to train_idx
     raw = RawMocapGenerator(dt=1e-3, tile_repeats=1)
     _restrict_mocap_to_train(raw, train_idx)

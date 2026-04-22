@@ -8,19 +8,21 @@ from .amp_generator import AMPPlaceholderGenerator
 from .base import BaseGaitGenerator
 from .cpg_matsuoka import CPGMatsuokaGenerator
 from .cubic_spline import CubicSplineGenerator
-from .fft_mlp import FFTMLPGenerator
+from .fft_mlp_2d import FFTMLP2DGenerator
 from .raw_mocap import RawMocapGenerator
 from .rnn_generator import RNNGenerator
 from .fft_mlp_review import FFTMLPReviewGenerator
+from .fft_mlp import FFTMLPGenerator
 
 GENERATORS: Dict[str, Callable[..., BaseGaitGenerator]] = {
-    FFTMLPGenerator.name: FFTMLPGenerator,
+    FFTMLP2DGenerator.name: FFTMLP2DGenerator,
     RawMocapGenerator.name: RawMocapGenerator,
     CubicSplineGenerator.name: CubicSplineGenerator,
     CPGMatsuokaGenerator.name: CPGMatsuokaGenerator,
     RNNGenerator.name: RNNGenerator,
     AMPPlaceholderGenerator.name: AMPPlaceholderGenerator,
     FFTMLPReviewGenerator.name: FFTMLPReviewGenerator,
+    FFTMLPGenerator.name: FFTMLPGenerator,
 }
 
 
