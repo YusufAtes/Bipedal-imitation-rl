@@ -1,0 +1,29 @@
+{
+  "n_test": 89,
+  "coef_mse": 0.5094470381736755,
+  "time_domain_mse": 0.03156154602766037,
+  "time_mse_per_joint": [
+    0.02143915742635727,
+    0.04018409922719002,
+    0.020359808579087257,
+    0.044263120740652084
+  ],
+  "fft_fidelity_h1_h3": 0.7941034436225891,
+  "period_mae_s": 0.03310021758079529,
+  "period_mape": 0.07193974405527115,
+  "n_period_nonpositive": 0,
+  "variant": "residual",
+  "best_hp": {
+    "best_val": 0.1872926480240292,
+    "best_epoch": 3,
+    "epochs": 253,
+    "hidden_size": 512,
+    "lr": 0.0003,
+    "batch_size": 64,
+    "tag": "hs512_lr0.0003_bs64"
+  },
+  "alpha": 1.0,
+  "use_residual": true,
+  "period_weight_s": 0.5,
+  "augmentation": true
+}

@@ -17,6 +17,8 @@ Fair protocol (this script)
      * ``cubic_spline_train`` -- per-speed bucket over train corpus only
      * ``cpg_matsuoka``       -- data-free, no restriction needed
      * ``fft_mlp_review``     -- already trained on train split
+     * ``fft_mlp_v2_<variant>`` -- review-v2 variants (baseline / phase /
+                                    residual / phase_residual)
 3. Iterate over TEST samples.  For each held-out sample with its own
    ``(speed_i, r_leg_i, l_leg_i)`` and ground-truth time-domain trajectory
    (reconstructed from its own FFT coefficients), evaluate every generator.
@@ -33,12 +35,19 @@ Outputs
 * ``<out>/per_sample.csv``  one row per (generator, test_idx)
 
 Run with:
+    # baseline suite (v1 behaviour, default)
     python analyse_gait_generators.py --out figs_demo/gait_gen_review
-    python analyse_gait_generators.py --out figs_demo/gait_gen_loso --loso
 
-The ``--loso`` flag is a stub that documents the leave-one-subject-out
-variant.  Subject identity is not encoded in ``input_vector.npy``; re-parsing
-the C3D folder tree is required.  Out of scope for this commit.
+    # include all 4 v2 variants as separate series
+    python analyse_gait_generators.py --out figs_demo/gait_gen_v2 \\
+        --v2-variants baseline phase residual phase_residual
+
+    # only the best v2 variant alongside baselines
+    python analyse_gait_generators.py --out figs_demo/gait_gen_v2_best \\
+        --v2-variants phase_residual
+
+    # leave-one-subject-out stub
+    python analyse_gait_generators.py --out figs_demo/gait_gen_loso --loso
 """
 
 from __future__ import annotations
@@ -58,8 +67,13 @@ from gait_generators.raw_mocap import RawMocapGenerator
 from gait_generators.cubic_spline import CubicSplineGenerator
 
 
-# Generators evaluated in the fair protocol. Order dictates legend order.
-GENERATOR_NAMES = ("fft_mlp", "fft_mlp_review", "raw_mocap", "cubic_spline", "cpg_matsuoka")
+# Default BASELINE generator set evaluated in the fair protocol.  v2 variants
+# are added to this tuple at runtime based on --v2-variants.  Order dictates
+# legend order in the output plots.
+BASELINE_GENERATOR_NAMES: tuple[str, ...] = (
+    "fft_mlp", "fft_mlp_review", "raw_mocap", "cubic_spline", "cpg_matsuoka",
+)
+VALID_V2_VARIANTS = ("baseline", "phase", "residual", "phase_residual")
 
 SPLIT_PATH = Path("gait reference phase 2") / "split_indices.npz"
 
@@ -133,8 +147,26 @@ class TrainRestrictedCubicSpline(CubicSplineGenerator):
         _restrict_mocap_to_train(self._mocap, train_idx)
 
 
-def build_fair_generators(train_idx: np.ndarray) -> dict[str, object]:
-    """Every generator is fitted / restricted to the train split only."""
+def build_fair_generators(
+    train_idx: np.ndarray,
+    v2_variants: tuple[str, ...] = (),
+) -> dict[str, object]:
+    """Build every generator under the fair protocol.
+
+    Parameters
+    ----------
+    train_idx : np.ndarray
+        Train split indices (for restricting data-driven baselines).
+    v2_variants : tuple[str, ...]
+        Names of v2 variants to include.  Each is registered under a
+        human-readable display name ``fft_mlp_v2_<variant>`` so they
+        appear as distinct series in the plots / CSVs.
+
+        The checkpoints are assumed to exist at
+        ``kfold_results/FINAL_BEST_MODEL_V2_<variant>.pth`` (produced by
+        ``fft_datacreate_review_v2.py``).  If a checkpoint is missing,
+        that variant is silently skipped with a warning.
+    """
     gens: dict[str, object] = {}
 
     # -- fft_mlp_review: already trained on train split by fft_datacreate_review.py
@@ -158,6 +190,26 @@ def build_fair_generators(train_idx: np.ndarray) -> dict[str, object]:
     gens["cpg_matsuoka"] = build_generator(
         "cpg_matsuoka", dt=1e-3, tile_repeats=1
     )
+
+    # -- fft_mlp_v2 variants (one instance per requested variant, registered
+    #    under a human-readable display name that matches the plot legend)
+    for v in v2_variants:
+        if v not in VALID_V2_VARIANTS:
+            print(f"[warn]  skipping unknown v2 variant '{v}' "
+                  f"(valid: {VALID_V2_VARIANTS})")
+            continue
+        ckpt = (Path("kfold_results") / f"FINAL_BEST_MODEL_V2_{v}.pth")
+        if not ckpt.exists():
+            print(f"[warn]  skipping v2 variant '{v}': checkpoint not found at {ckpt}. "
+                  f"Run `python fft_datacreate_review_v2.py --variant {v}` first.")
+            continue
+        display_name = f"fft_mlp_v2_{v}"
+        gens[display_name] = build_generator(
+            "fft_mlp_v2",
+            variant=v,
+            dt=1e-3,
+            tile_repeats=1,
+        )
     return gens
 
 
@@ -286,6 +338,34 @@ def evaluate_morphology(
 # ----------------------------------------------------------------------------
 # Plotting
 # ----------------------------------------------------------------------------
+# Deterministic colour/style per generator so the same series always looks
+# the same across the 4 plots, even if order changes.
+def _style_for(name: str, idx: int) -> dict:
+    # v2 variants share a dashed style + reddish-orange palette so they
+    # stand out visually from the static baselines.
+    v2_palette = {
+        "fft_mlp_v2_baseline":       ("#ff7f0e", "--", "s"),
+        "fft_mlp_v2_phase":          ("#d62728", "--", "D"),
+        "fft_mlp_v2_residual":       ("#9467bd", "--", "^"),
+        "fft_mlp_v2_phase_residual": ("#8c564b", "--", "P"),
+    }
+    baseline_palette = {
+        "fft_mlp":        ("#1f77b4", "-", "o"),
+        "fft_mlp_review": ("#ff9d3a", "-", "o"),
+        "raw_mocap":      ("#2ca02c", "-", "o"),
+        "cubic_spline":   ("#e377c2", "-", "o"),
+        "cpg_matsuoka":   ("#7f7f7f", "-", "o"),
+    }
+    if name in v2_palette:
+        c, ls, m = v2_palette[name]
+    elif name in baseline_palette:
+        c, ls, m = baseline_palette[name]
+    else:
+        # fallback for anything unexpected
+        c = f"C{idx % 10}"; ls = "-"; m = "o"
+    return dict(color=c, linestyle=ls, marker=m, linewidth=1.4, markersize=5)
+
+
 def _plot_curves(
     xs: np.ndarray,
     ys: dict[str, np.ndarray],
@@ -294,20 +374,22 @@ def _plot_curves(
     title: str,
     out_path: Path,
 ) -> None:
-    plt.figure(figsize=(7, 4))
-    for name, y in ys.items():
+    plt.figure(figsize=(8, 4.5))
+    for idx, (name, y) in enumerate(ys.items()):
         # skip NaN-only series (empty bin)
         if np.all(np.isnan(y)):
+            print(f"  [plot] skipping {name} - all NaN for '{title}'")
             continue
-        plt.plot(xs, y, marker="o", label=name)
+        plt.plot(xs, y, label=name, **_style_for(name, idx))
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
-    plt.legend(loc="best", fontsize=8)
+    plt.legend(loc="best", fontsize=7, ncol=2)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(out_path, dpi=150)
     plt.close()
+    print(f"  [plot] wrote {out_path}")
 
 
 # ----------------------------------------------------------------------------
@@ -379,12 +461,24 @@ def main() -> int:
         type=float,
         nargs="*",
         default=None,
-        help="Bin edges for the per-speed plots (default: 0.2,0.5,0.8,1.1,1.4,1.7,2.0,2.4).",
+        help="Bin edges for the per-speed plots "
+             "(default: 0.2,0.5,0.8,1.1,1.4,1.7,2.0,2.4).",
+    )
+    parser.add_argument(
+        "--v2-variants",
+        type=str,
+        nargs="*",
+        default=[],
+        choices=list(VALID_V2_VARIANTS),
+        help="Which v2 variants to include as separate plot series. "
+             "Each requires a trained checkpoint at "
+             "kfold_results/FINAL_BEST_MODEL_V2_<variant>.pth. "
+             "Example: --v2-variants baseline phase residual phase_residual",
     )
     parser.add_argument(
         "--loso",
         action="store_true",
-        help="Leave-one-subject-out (stub — requires re-parsing dataset/*/*.c3d).",
+        help="Leave-one-subject-out (stub - requires re-parsing dataset/*/*.c3d).",
     )
     args = parser.parse_args()
 
@@ -404,8 +498,12 @@ def main() -> int:
     print(f"[data] train={len(train_idx)}  val={len(val_idx)}  test={len(test_idx)}")
 
     # --- 2. generators restricted to train corpus
-    generators = build_fair_generators(train_idx)
-    print(f"[gen]  fitted: {list(generators)}")
+    v2_variants = tuple(args.v2_variants)
+    generators = build_fair_generators(train_idx, v2_variants=v2_variants)
+    # FINAL series list for the plots = whatever was actually instantiated,
+    # preserving the order: baselines first, then v2 variants as provided.
+    generator_names: tuple[str, ...] = tuple(generators.keys())
+    print(f"[gen]  fitted ({len(generator_names)}): {list(generator_names)}")
 
     # --- 3. per-test-sample metrics
     rows, per_gen = evaluate_per_test_sample(test_idx, inputs, raw_fft, generators)
@@ -416,11 +514,11 @@ def main() -> int:
     bin_edges = (np.asarray(args.speed_bins, dtype=float)
                  if args.speed_bins else DEFAULT_SPEED_BINS)
     agg = aggregate_by_speed(per_gen, bin_edges)
-    centres = agg[GENERATOR_NAMES[0]]["centres"]
+    centres = agg[generator_names[0]]["centres"]
 
     _plot_curves(
         centres,
-        {n: agg[n]["mse"] for n in GENERATOR_NAMES},
+        {n: agg[n]["mse"] for n in generator_names},
         "Commanded speed (m/s, bin centre)",
         "Per-joint MSE (rad^2)",
         "Gait-generator accuracy vs. held-out test samples",
@@ -428,7 +526,7 @@ def main() -> int:
     )
     _plot_curves(
         centres,
-        {n: agg[n]["dtw"] for n in GENERATOR_NAMES},
+        {n: agg[n]["dtw"] for n in generator_names},
         "Commanded speed (m/s, bin centre)",
         "Mean DTW distance",
         "DTW vs. held-out test samples",
@@ -436,7 +534,7 @@ def main() -> int:
     )
     _plot_curves(
         centres,
-        {n: agg[n]["fft"] for n in GENERATOR_NAMES},
+        {n: agg[n]["fft"] for n in generator_names},
         "Commanded speed (m/s, bin centre)",
         "Mean |FFT mag error| @ first 3 harmonics",
         "Spectral fidelity vs. held-out test samples",
@@ -459,10 +557,10 @@ def main() -> int:
 
     # --- 7. print a quick textual leaderboard
     print("\n[leaderboard] mean over all test samples:")
-    print(f"  {'generator':<18s}  {'MSE':>8s}  {'DTW':>8s}  {'FFT':>8s}  n")
-    for n in GENERATOR_NAMES:
+    print(f"  {'generator':<28s}  {'MSE':>8s}  {'DTW':>8s}  {'FFT':>8s}  n")
+    for n in generator_names:
         d = per_gen[n]
-        print(f"  {n:<18s}  {d['mse'].mean():>8.4f}  "
+        print(f"  {n:<28s}  {d['mse'].mean():>8.4f}  "
               f"{d['dtw'].mean():>8.4f}  {d['fft'].mean():>8.4f}  {len(d['mse'])}")
 
     print(f"\n[done] analysis written to {out}")

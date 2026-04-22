@@ -1,0 +1,29 @@
+{
+  "n_test": 89,
+  "coef_mse": 0.9050573706626892,
+  "time_domain_mse": 0.05772555246949196,
+  "time_mse_per_joint": [
+    0.04163253679871559,
+    0.070270836353302,
+    0.03995053097605705,
+    0.07904830574989319
+  ],
+  "fft_fidelity_h1_h3": 1.4701619148254395,
+  "period_mae_s": 0.03399172052741051,
+  "period_mape": 0.07674284279346466,
+  "n_period_nonpositive": 0,
+  "variant": "phase",
+  "best_hp": {
+    "best_val": 0.15350114394117284,
+    "best_epoch": 297,
+    "epochs": 547,
+    "hidden_size": 512,
+    "lr": 0.001,
+    "batch_size": 64,
+    "tag": "hs512_lr0.001_bs64"
+  },
+  "alpha": 0.4,
+  "use_residual": false,
+  "period_weight_s": 0.5,
+  "augmentation": true
+}

@@ -13,6 +13,7 @@ from .raw_mocap import RawMocapGenerator
 from .rnn_generator import RNNGenerator
 from .fft_mlp_review import FFTMLPReviewGenerator
 from .fft_mlp import FFTMLPGenerator
+from .fft_mlp_v2 import FFTMLPv2Generator
 
 GENERATORS: Dict[str, Callable[..., BaseGaitGenerator]] = {
     FFTMLP2DGenerator.name: FFTMLP2DGenerator,
@@ -23,6 +24,7 @@ GENERATORS: Dict[str, Callable[..., BaseGaitGenerator]] = {
     AMPPlaceholderGenerator.name: AMPPlaceholderGenerator,
     FFTMLPReviewGenerator.name: FFTMLPReviewGenerator,
     FFTMLPGenerator.name: FFTMLPGenerator,
+    FFTMLPv2Generator.name: FFTMLPv2Generator,
 }
 
 
