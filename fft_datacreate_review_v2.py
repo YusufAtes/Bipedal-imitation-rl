@@ -710,7 +710,7 @@ def main() -> int:
     else:
         hp_grid = [
             dict(hidden_size=hs, lr=lr, batch_size=bs)
-            for hs, lr, bs in product([512], [1e-3, 3e-4], [32, 64])
+            for hs, lr, bs in product([256,512], [1e-3, 3e-4], [32, 64])
         ]
         max_epochs = MAX_EPOCHS
 
