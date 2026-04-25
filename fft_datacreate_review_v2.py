@@ -50,6 +50,18 @@ What changed vs ``fft_datacreate_review.py``
        residual        - +cubic-spline residual, +softplus period head
        phase_residual  - all improvements combined
 
+6. **Held-out test set is now used.**  After the best-HP model is chosen on
+   val, we evaluate it on the test split and dump:
+       - kfold_results/review_v2/test_metrics_<variant>.json       (as before)
+       - kfold_results/review_v2/time_domain_<variant>/sample_*.png
+             2x2 per-joint GT vs prediction for every test sample
+       - kfold_results/review_v2/variants_test_comparison.png
+             grouped bar chart across all 4 variants (auto-skips missing)
+   The cross-variant comparison plot is regenerated every run from whichever
+   ``test_metrics_*.json`` files exist, so running only 2 variants still
+   produces a 2-bar comparison.  Use ``--compare-only`` to rebuild the
+   comparison plot without retraining.
+
 Hard-coded paths (independent namespace from the v1 script)
 -----------------------------------------------------------
     weights        = kfold_results/FINAL_BEST_MODEL_V2_<variant>.pth
@@ -62,11 +74,13 @@ Run
     python fft_datacreate_review_v2.py --variant phase_residual
     python fft_datacreate_review_v2.py --variant residual --quick
     python fft_datacreate_review_v2.py --variant baseline           # sanity
+    python fft_datacreate_review_v2.py --compare-only               # just replot
 """
 
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 from itertools import product
@@ -102,6 +116,13 @@ STD_TRAIN_NPY      = os.path.join(DATA_DIR, "std_train.npy")
 PERIOD_STATS_NPY   = os.path.join(DATA_DIR, "period_stats.npy")
 SPLINE_PRIOR_NPZ   = os.path.join(DATA_DIR, "spline_prior_v2.npz")
 
+# Cross-variant comparison plot (written every run)
+COMPARISON_PNG = os.path.join(REVIEW_DIR, "variants_test_comparison.png")
+
+# Joint labels for the 4-channel FFT targets. If your channels are ordered
+# differently, change the list here - plotting only, no downstream effect.
+JOINT_NAMES = ["RHip", "RKnee", "LHip", "LKnee"]
+
 
 # ============================================================================
 # CONFIG
@@ -112,8 +133,8 @@ OUTPUT_SIZE  = FREQ_DIM + 1              # + period
 
 SEED         = 42
 TRAIN_FRAC   = 0.80
-VAL_FRAC     = 0.12
-TEST_FRAC    = 0.08
+VAL_FRAC     = 0.15
+TEST_FRAC    = 0.05
 PATIENCE     = 250
 MAX_EPOCHS   = 4000
 
@@ -125,6 +146,9 @@ TIME_ALPHA            = 0.4     # L = alpha*fft + (1-alpha)*time
 PHASE_AUG_PROB        = 0.5
 PHASE_AUG_MAX_SHIFT   = 4       # samples out of 32 (= up to 45 deg)
 DEVICE                = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Cap on per-sample time-domain plots (to avoid 500 PNGs if test is large)
+MAX_TIME_DOMAIN_SAMPLES = 60
 
 
 # ============================================================================
@@ -547,8 +571,43 @@ def train_one(
 
 
 # ============================================================================
-# 5. EVALUATION
+# 5. EVALUATION (test-set metrics + time-domain tensors for plotting)
 # ============================================================================
+def _forward_full(
+    model: nn.Module,
+    inputs: np.ndarray,
+    idx: np.ndarray,
+    mean_perbin: np.ndarray,
+    std_global: float,
+    spline_prior: SplinePrior | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Run the full pred pipeline (MLP [+ spline prior] -> de-normalise)
+    on the samples at ``idx``.  Returns:
+        pred_freq_denorm  (B, 17, 4, 2)     physical FFT coefficients
+        pred_period_s     (B,)              period in seconds
+    """
+    model.eval()
+    x = torch.tensor(inputs[idx], dtype=torch.float32, device=DEVICE)
+    with torch.no_grad():
+        pred_freq_raw, pred_period = model(x)
+    pred_freq_raw = pred_freq_raw.cpu().numpy()
+    pred_period_s = pred_period.cpu().numpy().squeeze(-1)
+
+    if spline_prior is not None:
+        speeds_ms = inputs[idx, 0] * 2.4
+        prior_freq_denorm, prior_period = spline_prior(speeds_ms)
+        prior_freq_norm = (prior_freq_denorm - mean_perbin) / std_global
+        pred_freq_norm = pred_freq_raw + prior_freq_norm
+        pred_period_s  = pred_period_s + prior_period
+    else:
+        pred_freq_norm = pred_freq_raw
+
+    pred_freq_denorm = (pred_freq_norm * std_global + mean_perbin
+                       ).reshape(-1, 17, 4, 2)
+    return pred_freq_denorm, pred_period_s
+
+
 def evaluate_test(
     model: nn.Module,
     inputs: np.ndarray,
@@ -558,28 +617,18 @@ def evaluate_test(
     mean_perbin: np.ndarray,
     std_global: float,
     spline_prior: SplinePrior | None,
-) -> dict:
-    model.eval()
-    x = torch.tensor(inputs[test_idx], dtype=torch.float32, device=DEVICE)
-    with torch.no_grad():
-        pred_freq_raw, pred_period = model(x)
-    pred_freq_raw = pred_freq_raw.cpu().numpy()
-    pred_period_s = pred_period.cpu().numpy().squeeze(-1)
-
-    if spline_prior is not None:
-        speeds_ms = inputs[test_idx, 0] * 2.4
-        prior_freq_denorm, prior_period = spline_prior(speeds_ms)
-        prior_freq_norm = (prior_freq_denorm - mean_perbin) / std_global
-        pred_freq_norm = pred_freq_raw + prior_freq_norm
-        pred_period_s  = pred_period_s + prior_period
-    else:
-        pred_freq_norm = pred_freq_raw
-
-    # De-normalise for time-domain metrics
-    pred_freq_denorm = pred_freq_norm * std_global + mean_perbin
-    pred_freq_denorm = pred_freq_denorm.reshape(-1, 17, 4, 2)
-    gt_freq          = raw_fft[test_idx]                          # (B,17,4,2)
-    gt_period_s      = period[test_idx, 0]
+) -> tuple[dict, np.ndarray, np.ndarray]:
+    """
+    Returns:
+        metrics     dict of scalar test metrics
+        pred_time   (B, 32, 4) reconstructed joint trajectories  (prediction)
+        gt_time     (B, 32, 4) reconstructed joint trajectories  (ground truth)
+    """
+    pred_freq_denorm, pred_period_s = _forward_full(
+        model, inputs, test_idx, mean_perbin, std_global, spline_prior
+    )
+    gt_freq     = raw_fft[test_idx]                          # (B,17,4,2)
+    gt_period_s = period[test_idx, 0]
 
     # --- metrics
     coef_mse = float(np.mean((pred_freq_denorm - gt_freq) ** 2))
@@ -600,7 +649,7 @@ def evaluate_test(
     pred_mag = np.abs(pred_cx); gt_mag = np.abs(gt_cx)
     fft_fid_h3 = float(np.mean(np.abs(pred_mag[:, 1:4] - gt_mag[:, 1:4])))
 
-    return dict(
+    metrics = dict(
         n_test=int(len(test_idx)),
         coef_mse=coef_mse,
         time_domain_mse=time_mse,
@@ -609,7 +658,10 @@ def evaluate_test(
         period_mae_s=period_mae,
         period_mape=period_mape,
         n_period_nonpositive=n_period_neg,
+        pred_period_s=pred_period_s.tolist(),
+        gt_period_s=gt_period_s.tolist(),
     )
+    return metrics, pred_t, gt_t
 
 
 # ============================================================================
@@ -627,6 +679,113 @@ def plot_training_curves(histories, out_path: str) -> None:
         ax.legend(fontsize=7, loc="upper right")
     fig.tight_layout(); fig.savefig(out_path, dpi=150); plt.close(fig)
     print(f"[plot] saved {out_path}")
+
+
+def plot_time_domain_samples(
+    pred_t: np.ndarray,         # (B, 32, 4)
+    gt_t:   np.ndarray,         # (B, 32, 4)
+    test_idx: np.ndarray,       # (B,)  original dataset indices (for filenames)
+    inputs: np.ndarray,         # (N, 3) for per-sample subtitle (speed, legs)
+    variant: str,
+    out_dir: str,
+    max_samples: int = MAX_TIME_DOMAIN_SAMPLES,
+) -> None:
+    """
+    2x2 plot per test sample: one subplot per joint (GT vs prediction,
+    normalised phase in [0, 1)).  Saved as sample_<idx>.png.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    B, T, J = pred_t.shape
+    assert J == len(JOINT_NAMES), (
+        f"JOINT_NAMES has {len(JOINT_NAMES)} entries but data has {J} channels"
+    )
+    n_plot = min(B, max_samples)
+    phase = np.linspace(0.0, 1.0, T, endpoint=False)
+
+    for i in range(n_plot):
+        fig, axes = plt.subplots(2, 2, figsize=(9, 6), sharex=True)
+        for j, ax in enumerate(axes.flat):
+            ax.plot(phase, gt_t[i, :, j],   lw=2.0, label="GT",   color="#1f77b4")
+            ax.plot(phase, pred_t[i, :, j], lw=2.0, label="Pred", color="#d62728",
+                    linestyle="--")
+            err = np.sqrt(((pred_t[i, :, j] - gt_t[i, :, j]) ** 2).mean())
+            ax.set_title(f"{JOINT_NAMES[j]}   RMSE={err:.4f}", fontsize=10)
+            ax.grid(True, alpha=0.3)
+            if j >= 2:
+                ax.set_xlabel("Gait phase")
+            ax.set_ylabel("Joint angle (rad)")
+            if j == 0:
+                ax.legend(fontsize=8, loc="best")
+        orig_idx = int(test_idx[i])
+        speed = float(inputs[orig_idx, 0]) * 2.4
+        r_leg = float(inputs[orig_idx, 1])
+        l_leg = float(inputs[orig_idx, 2])
+        fig.suptitle(
+            f"[{variant}]  test sample #{i}  (dataset idx {orig_idx})   "
+            f"speed={speed:.2f} m/s  r_leg={r_leg:.3f}  l_leg={l_leg:.3f}",
+            fontsize=11,
+        )
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+        out_path = os.path.join(out_dir, f"sample_{i:03d}_idx{orig_idx:04d}.png")
+        fig.savefig(out_path, dpi=130)
+        plt.close(fig)
+    print(f"[plot] saved {n_plot} per-sample time-domain plots to {out_dir}")
+
+
+def plot_variant_comparison(out_path: str = COMPARISON_PNG) -> None:
+    """
+    Read every ``test_metrics_*.json`` in REVIEW_DIR and draw a grouped bar
+    chart of the 4 scalar test metrics across variants. Gracefully skips
+    variants that haven't been trained yet.
+    """
+    # Canonical order so plots are comparable across runs
+    order = ["baseline", "phase", "residual", "phase_residual"]
+    found = {}
+    for v in order:
+        p = os.path.join(REVIEW_DIR, f"test_metrics_{v}.json")
+        if os.path.exists(p):
+            with open(p, "r") as f:
+                found[v] = json.load(f)
+
+    if not found:
+        print(f"[compare] no test_metrics_*.json found under {REVIEW_DIR}; skip plot")
+        return
+
+    variants = [v for v in order if v in found]
+    metric_keys = [
+        ("coef_mse",          "FFT coef MSE (z-scored)"),
+        ("time_domain_mse",   "Time-domain MSE (rad^2)"),
+        ("fft_fidelity_h1_h3","FFT fidelity |H1..H3| MAE"),
+        ("period_mae_s",      "Period MAE (s)"),
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7))
+    colors = ["#4C72B0", "#DD8452", "#55A467", "#C44E52"]
+
+    for ax, (key, label) in zip(axes.flat, metric_keys):
+        vals = [found[v].get(key, float("nan")) for v in variants]
+        bars = ax.bar(variants, vals,
+                      color=[colors[order.index(v) % len(colors)] for v in variants],
+                      edgecolor="black", linewidth=0.6)
+        ax.set_title(label, fontsize=11)
+        ax.set_ylabel(label)
+        ax.grid(True, axis="y", alpha=0.3)
+        ax.tick_params(axis="x", labelrotation=15)
+        # annotate bar heights
+        for b, v in zip(bars, vals):
+            if np.isfinite(v):
+                ax.text(b.get_x() + b.get_width() / 2, b.get_height(),
+                        f"{v:.4g}", ha="center", va="bottom", fontsize=8)
+        # Slight headroom for text
+        finite_vals = [v for v in vals if np.isfinite(v)]
+        if finite_vals:
+            ax.set_ylim(top=max(finite_vals) * 1.18)
+
+    fig.suptitle("Test-set performance across FFT-MLP variants", fontsize=13)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    print(f"[compare] saved {out_path}  (variants: {', '.join(variants)})")
 
 
 # ============================================================================
@@ -651,9 +810,17 @@ def main() -> int:
                     default="phase_residual")
     ap.add_argument("--quick", action="store_true", help="Smoke run (200 epochs, one hp).")
     ap.add_argument("--no-aug", action="store_true")
+    ap.add_argument("--compare-only", action="store_true",
+                    help="Skip training; just rebuild variants_test_comparison.png")
     args = ap.parse_args()
 
     os.makedirs(REVIEW_DIR, exist_ok=True)
+
+    # ---- fast path: only rebuild the comparison plot
+    if args.compare_only:
+        plot_variant_comparison()
+        return 0
+
     torch.manual_seed(SEED); np.random.seed(SEED)
 
     cfg = variant_config(args.variant)
@@ -666,6 +833,7 @@ def main() -> int:
     metrics_js = os.path.join(REVIEW_DIR, f"test_metrics_{cfg['tag']}.json")
     curves_png = os.path.join(REVIEW_DIR, f"training_curves_{cfg['tag']}.png")
     hp_csv     = os.path.join(REVIEW_DIR, f"hp_search_{cfg['tag']}.csv")
+    time_dir   = os.path.join(REVIEW_DIR, f"time_domain_{cfg['tag']}")
 
     # ---- 1. data
     inputs, raw_fft, period = load_raw_arrays()
@@ -685,18 +853,12 @@ def main() -> int:
     spline_prior = (SplinePrior(**prior_data) if cfg["use_residual"] else None)
 
     # ---- 5. targets -> tensors
-    # freq z-scored (134-dim with mean-perbin + scalar std), period in seconds
     flat = raw_fft.reshape(raw_fft.shape[0], -1)
     freq_norm = ((flat - mean_perbin) / std_global).astype(np.float32)
     period_s  = period.astype(np.float32)                         # already seconds
     X         = torch.tensor(inputs,    dtype=torch.float32)
     Yf        = torch.tensor(freq_norm, dtype=torch.float32)
     Yp        = torch.tensor(period_s,  dtype=torch.float32)
-
-    # For residual variant, subtract the prior from the target so the MLP
-    # learns the residual.  (Equivalent to adding prior to pred; we do it
-    # in the training loop so eval code stays identical.)
-    # -> We DO NOT pre-subtract; see note in train_one.
 
     train_ds = TensorDataset(X[train_idx], Yf[train_idx], Yp[train_idx])
     val_ds   = TensorDataset(X[val_idx],   Yf[val_idx],   Yp[val_idx])
@@ -710,7 +872,7 @@ def main() -> int:
     else:
         hp_grid = [
             dict(hidden_size=hs, lr=lr, batch_size=bs)
-            for hs, lr, bs in product([256,512], [1e-3, 3e-4], [32, 64])
+            for hs, lr, bs in product([256, 512], [1e-3, 3e-4], [32, 64])
         ]
         max_epochs = MAX_EPOCHS
 
@@ -756,22 +918,39 @@ def main() -> int:
     torch.save(best["model"].state_dict(), final_pth)
     print(f"       saved {final_pth}")
 
-    # ---- 10. test metrics
-    test_metrics = evaluate_test(
+    # ------------------------------------------------------------------
+    # 10. TEST-SET EVALUATION (only the best HP config, weights already loaded
+    #     into best['model'] by train_one via ``load_state_dict(best_state)``)
+    # ------------------------------------------------------------------
+    print(f"\n[test] evaluating best '{best['info']['tag']}' on {len(test_idx)} samples")
+    test_metrics, pred_t, gt_t = evaluate_test(
         best["model"], inputs, raw_fft, period, test_idx,
         mean_perbin, std_global, spline_prior,
     )
-    test_metrics["variant"]     = args.variant
-    test_metrics["best_hp"]     = best["info"]
-    test_metrics["alpha"]       = cfg["alpha"]
-    test_metrics["use_residual"] = cfg["use_residual"]
+    test_metrics["variant"]        = args.variant
+    test_metrics["best_hp"]        = best["info"]
+    test_metrics["alpha"]          = cfg["alpha"]
+    test_metrics["use_residual"]   = cfg["use_residual"]
     test_metrics["period_weight_s"] = PERIOD_WEIGHT_S
-    test_metrics["augmentation"] = (not args.no_aug)
+    test_metrics["augmentation"]   = (not args.no_aug)
     with open(metrics_js, "w") as f:
         json.dump(test_metrics, f, indent=2)
     print(f"       saved {metrics_js}")
-    print(json.dumps({k: v for k, v in test_metrics.items() if not isinstance(v, dict)},
-                     indent=2, default=str))
+    # Print scalar-only summary (time_mse_per_joint / pred_period_s lists hidden)
+    scalar_only = {
+        k: v for k, v in test_metrics.items()
+        if not isinstance(v, (list, dict))
+    }
+    print(json.dumps(scalar_only, indent=2, default=str))
+
+    # 10a. per-sample time-domain 2x2 plots
+    plot_time_domain_samples(
+        pred_t, gt_t, test_idx, inputs,
+        variant=cfg["tag"], out_dir=time_dir,
+    )
+
+    # 10b. cross-variant comparison (uses every test_metrics_*.json present)
+    plot_variant_comparison()
 
     print(f"\n[done] variant '{args.variant}' complete.")
     return 0

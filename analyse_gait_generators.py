@@ -39,8 +39,7 @@ Run with:
     python analyse_gait_generators.py --out figs_demo/gait_gen_review
 
     # include all 4 v2 variants as separate series
-    python analyse_gait_generators.py --out figs_demo/gait_gen_v2 \\
-        --v2-variants baseline phase residual phase_residual
+    python analyse_gait_generators.py --out figs_demo/gait_gen_v2 --v2-variants  residual 
 
     # only the best v2 variant alongside baselines
     python analyse_gait_generators.py --out figs_demo/gait_gen_v2_best \\
