@@ -14,6 +14,7 @@ from .rnn_generator import RNNGenerator
 from .fft_mlp_review import FFTMLPReviewGenerator
 from .fft_mlp import FFTMLPGenerator
 from .fft_mlp_v2 import FFTMLPv2Generator
+from .fft_mlp_old import FFTMLPOldGenerator
 
 GENERATORS: Dict[str, Callable[..., BaseGaitGenerator]] = {
     FFTMLP2DGenerator.name: FFTMLP2DGenerator,
@@ -25,6 +26,7 @@ GENERATORS: Dict[str, Callable[..., BaseGaitGenerator]] = {
     FFTMLPReviewGenerator.name: FFTMLPReviewGenerator,
     FFTMLPGenerator.name: FFTMLPGenerator,
     FFTMLPv2Generator.name: FFTMLPv2Generator,
+    FFTMLPOldGenerator.name: FFTMLPOldGenerator,
 }
 
 

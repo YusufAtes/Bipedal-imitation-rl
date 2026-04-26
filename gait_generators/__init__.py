@@ -26,6 +26,7 @@ from .cubic_spline import CubicSplineGenerator
 from .cpg_matsuoka import CPGMatsuokaGenerator
 from .rnn_generator import RNNGenerator
 from .amp_generator import AMPPlaceholderGenerator
+from .fft_mlp_old import FFTMLPOldGenerator
 from .registry import GENERATORS, build_generator
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "CPGMatsuokaGenerator",
     "RNNGenerator",
     "AMPPlaceholderGenerator",
+    "FFTMLPOldGenerator",
     "GENERATORS",
     "build_generator",
 ]
