@@ -887,77 +887,81 @@ if __name__ == "__main__":
 
     ppo_type = "mlp"                # "lstm" or "mlp"
     demo_type = "vel_diff"          # "rotation" or "noisy"
-    ppo_path = r"C:\Users\bates\Desktop\Bipedal-imitation-rl\configurations\nodecay_mlp_norsi\PPO_43"
+    ppo_paths = [r"C:\Users\bates\Desktop\Bipedal-imitation-rl\configurations\nodecay_mlp_norsi\PPO_43"
+
+
+
+    ]
     ppo_file = "final_model.zip"
+    for ppo_path in ppo_paths:
+        scenario_mode = 0
+        speed_len = 21
+        angle_len = 31
 
-    scenario_mode = 0
-    speed_len = 21
-    angle_len = 31
+        episode_len = 4 # seconds
+        fail_threshold = 1
+        avg_trial_no= 3
+        scenario_count = 1
+        floor_length = 9.9  # meters
+        t0 = time.time()
 
-    episode_len = 4 # seconds
-    fail_threshold = 1
-    avg_trial_no= 3
-    scenario_count = 1
-    floor_length = 9.9  # meters
-    t0 = time.time()
+        # # # ----------------------------     END PARAMS     ----------------------------
 
-    # # # ----------------------------     END PARAMS     ----------------------------
+        # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+        #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+        #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+        #             demo_type=demo_type,ppo_type=ppo_type)
+        # print("Vel diff demo done, starting rotation demo now...")
+        # print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
 
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
-    print("Vel diff demo done, starting rotation demo now...")
-    print("Time taken for vel diff demo: {:.2f} seconds".format(time.time() - t0))
-
-    t0 = time.time()
-    demo_type = "symmetry_index"
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
-    
-    print("Symetry index demo done, starting rotation demo now...")
-    print("Time taken for Symetry index demo: {:.2f} seconds".format(time.time() - t0))
-
-
-    # t0 = time.time()
-    # demo_type = "rotation"
-    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-    #             demo_type=demo_type,ppo_type=ppo_type)
-    
-    # print("Rotation demo done, starting noisy demo now...")
-    # print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
-
-    t0 = time.time()
-    demo_type = "noisy"
-
-    made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-                avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-                floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-                demo_type=demo_type,ppo_type=ppo_type)
-    print(f"Noisy demo {scenario_mode} done!")
-    print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+        # t0 = time.time()
+        # demo_type = "symmetry_index"
+        # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+        #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+        #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+        #             demo_type=demo_type,ppo_type=ppo_type)
+        
+        # print("Symetry index demo done, starting rotation demo now...")
+        # print("Time taken for Symetry index demo: {:.2f} seconds".format(time.time() - t0))
 
 
-    # t0 = time.time()
-    # scenario_mode = 1
-    # demo_type = "noisy"
+        # t0 = time.time()
+        # demo_type = "rotation"
+        # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+        #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+        #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+        #             demo_type=demo_type,ppo_type=ppo_type)
+        
+        # print("Rotation demo done, starting noisy demo now...")
+        # print("Time taken for rotation demo: {:.2f} seconds".format(time.time() - t0))
 
-    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-    #             demo_type=demo_type,ppo_type=ppo_type)
-    # print(f"Noisy demo {scenario_mode} done!")
-    # print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+        t0 = time.time()
+        demo_type = "noisy"
 
-    # t0 = time.time()
-    # demo_type = "track"
-    # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
-    #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
-    #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
-    #             demo_type=demo_type,ppo_type=ppo_type)
-    # print("Track demo done!")
-    # print("Time taken for track demo: {:.2f} seconds".format(time.time() - t0))
+        made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+                    avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+                    floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+                    demo_type=demo_type,ppo_type=ppo_type)
+        print(f"Noisy demo {scenario_mode} done!")
+        print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+
+
+        t0 = time.time()
+        scenario_mode = 1
+        demo_type = "noisy"
+
+        made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+                    avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+                    floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+                    demo_type=demo_type,ppo_type=ppo_type)
+        print(f"Noisy demo {scenario_mode} done!")
+        print("Time taken for noisy demo: {:.2f} seconds".format(time.time() - t0))
+
+        # t0 = time.time()
+        # demo_type = "track"
+        # made_demo(scenario_mode=scenario_mode,speed_len=speed_len,angle_len=angle_len,episode_len=episode_len,
+        #             avg_trial_no=avg_trial_no,scenario_count=scenario_count,fail_threshold=fail_threshold,
+        #             floor_length=floor_length,ppo_path=ppo_path,ppo_file=ppo_file,
+        #             demo_type=demo_type,ppo_type=ppo_type)
+        # print("Track demo done!")
+        # print("Time taken for track demo: {:.2f} seconds".format(time.time() - t0))

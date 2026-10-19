@@ -38,7 +38,7 @@ _REPO = Path(__file__).resolve().parents[1]
 class FFTMLPOldGenerator(BaseGaitGenerator):
     """The review-trained 137-dim, 4-joint FFT-MLP."""
 
-    name = "fft_mlp_old"
+    name = "GaitGen"
 
     # ankles are not in mocap -> stay zero in both legacy and review paths
     _ANKLE_INDICES = (2, 5)

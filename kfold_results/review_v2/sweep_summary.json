@@ -1,26 +1,6 @@
 {
   "hp_grid": [
     {
-      "hidden_size": 256,
-      "lr": 0.0003,
-      "batch_size": 32
-    },
-    {
-      "hidden_size": 256,
-      "lr": 0.0003,
-      "batch_size": 64
-    },
-    {
-      "hidden_size": 256,
-      "lr": 0.001,
-      "batch_size": 32
-    },
-    {
-      "hidden_size": 256,
-      "lr": 0.001,
-      "batch_size": 64
-    },
-    {
       "hidden_size": 512,
       "lr": 0.0003,
       "batch_size": 32
@@ -28,16 +8,6 @@
     {
       "hidden_size": 512,
       "lr": 0.0003,
-      "batch_size": 64
-    },
-    {
-      "hidden_size": 512,
-      "lr": 0.001,
-      "batch_size": 32
-    },
-    {
-      "hidden_size": 512,
-      "lr": 0.001,
       "batch_size": 64
     }
   ],
@@ -49,13 +19,13 @@
   "results": [
     {
       "n_test": 89,
-      "coef_mse": 0.4852232038974762,
-      "time_domain_mse": 0.02991599589586258,
-      "fft_fidelity_h1_h3": 0.7084229588508606,
-      "period_mae_s": 0.029558761045336723,
-      "period_mape": 0.05994579941034317,
-      "period_mse_sec": 0.0018892365042120218,
-      "fair_test": 0.03936217841692269,
+      "coef_mse": 0.48690491914749146,
+      "time_domain_mse": 0.030033517628908157,
+      "fft_fidelity_h1_h3": 0.7252868413925171,
+      "period_mae_s": 0.02955741062760353,
+      "period_mape": 0.059941135346889496,
+      "period_mse_sec": 0.0018891680520027876,
+      "fair_test": 0.039479357888922095,
       "n_period_nonpositive": 0,
       "variant": "residual",
       "loss_kind": "notebook_zperiod",
@@ -63,18 +33,18 @@
       "alpha": 1.0,
       "use_residual": true,
       "augmentation": true,
-      "hp_grid_size": 8,
+      "hp_grid_size": 2,
       "fair_val_period_weight": 5.0
     },
     {
       "n_test": 89,
-      "coef_mse": 0.5201009511947632,
-      "time_domain_mse": 0.03225862607359886,
-      "fft_fidelity_h1_h3": 0.8231433033943176,
-      "period_mae_s": 0.03198834881186485,
-      "period_mape": 0.0683647096157074,
-      "period_mse_sec": 0.0020732630509883165,
-      "fair_test": 0.042624941328540444,
+      "coef_mse": 0.5057791471481323,
+      "time_domain_mse": 0.031318675726652145,
+      "fft_fidelity_h1_h3": 0.789093554019928,
+      "period_mae_s": 0.03305470943450928,
+      "period_mape": 0.07179449498653412,
+      "period_mse_sec": 0.002171961357817054,
+      "fair_test": 0.042178482515737414,
       "n_period_nonpositive": 0,
       "variant": "residual",
       "loss_kind": "baseline_v2",
@@ -82,18 +52,18 @@
       "alpha": 1.0,
       "use_residual": true,
       "augmentation": true,
-      "hp_grid_size": 8,
+      "hp_grid_size": 2,
       "fair_val_period_weight": 5.0
     },
     {
       "n_test": 89,
-      "coef_mse": 0.4856262505054474,
-      "time_domain_mse": 0.029980992898344994,
-      "fft_fidelity_h1_h3": 0.7530547380447388,
-      "period_mae_s": 0.030633261427283287,
-      "period_mape": 0.06375309079885483,
-      "period_mse_sec": 0.001957833068445325,
-      "fair_test": 0.03977015824057162,
+      "coef_mse": 0.49942201375961304,
+      "time_domain_mse": 0.030860990285873413,
+      "fft_fidelity_h1_h3": 0.7611905336380005,
+      "period_mae_s": 0.02959940955042839,
+      "period_mape": 0.060089245438575745,
+      "period_mse_sec": 0.00189126655459404,
+      "fair_test": 0.04031732305884361,
       "n_period_nonpositive": 0,
       "variant": "residual",
       "loss_kind": "time_heavy_period",
@@ -101,18 +71,18 @@
       "alpha": 0.4,
       "use_residual": true,
       "augmentation": true,
-      "hp_grid_size": 8,
+      "hp_grid_size": 2,
       "fair_val_period_weight": 5.0
     },
     {
       "n_test": 89,
-      "coef_mse": 0.9175208210945129,
-      "time_domain_mse": 0.05860593169927597,
-      "fft_fidelity_h1_h3": 1.5542699098587036,
-      "period_mae_s": 0.021183306351304054,
-      "period_mape": 0.04389449581503868,
-      "period_mse_sec": 0.00138778705149889,
-      "fair_test": 0.06554486695677042,
+      "coef_mse": 0.9725468754768372,
+      "time_domain_mse": 0.06207214295864105,
+      "fft_fidelity_h1_h3": 1.5772067308425903,
+      "period_mae_s": 0.021814705803990364,
+      "period_mape": 0.045394204556941986,
+      "period_mse_sec": 0.0016590059967711568,
+      "fair_test": 0.07036717294249684,
       "n_period_nonpositive": 0,
       "variant": "baseline",
       "loss_kind": "notebook_zperiod",
@@ -120,18 +90,18 @@
       "alpha": 1.0,
       "use_residual": false,
       "augmentation": true,
-      "hp_grid_size": 8,
+      "hp_grid_size": 2,
       "fair_val_period_weight": 5.0
     },
     {
       "n_test": 89,
-      "coef_mse": 0.9059951901435852,
-      "time_domain_mse": 0.05787544697523117,
-      "fft_fidelity_h1_h3": 1.5439869165420532,
-      "period_mae_s": 0.027380533516407013,
-      "period_mape": 0.06149516999721527,
-      "period_mse_sec": 0.0017254493432119489,
-      "fair_test": 0.06650269369129092,
+      "coef_mse": 0.9416223168373108,
+      "time_domain_mse": 0.06017407774925232,
+      "fft_fidelity_h1_h3": 1.5712794065475464,
+      "period_mae_s": 0.025913426652550697,
+      "period_mape": 0.05643801763653755,
+      "period_mse_sec": 0.0015129580860957503,
+      "fair_test": 0.06773886817973107,
       "n_period_nonpositive": 0,
       "variant": "baseline",
       "loss_kind": "baseline_v2",
@@ -139,18 +109,18 @@
       "alpha": 1.0,
       "use_residual": false,
       "augmentation": true,
-      "hp_grid_size": 8,
+      "hp_grid_size": 2,
       "fair_val_period_weight": 5.0
     },
     {
       "n_test": 89,
-      "coef_mse": 0.9364493489265442,
-      "time_domain_mse": 0.05969446152448654,
-      "fft_fidelity_h1_h3": 1.5789598226547241,
-      "period_mae_s": 0.025411685928702354,
-      "period_mape": 0.049742523580789566,
-      "period_mse_sec": 0.0016464327927678823,
-      "fair_test": 0.06792662548832595,
+      "coef_mse": 0.946620762348175,
+      "time_domain_mse": 0.06040194258093834,
+      "fft_fidelity_h1_h3": 1.562013864517212,
+      "period_mae_s": 0.02288554236292839,
+      "period_mape": 0.0476958192884922,
+      "period_mse_sec": 0.001889685750938952,
+      "fair_test": 0.0698503713356331,
       "n_period_nonpositive": 0,
       "variant": "baseline",
       "loss_kind": "time_heavy_period",
@@ -158,7 +128,7 @@
       "alpha": 0.4,
       "use_residual": false,
       "augmentation": true,
-      "hp_grid_size": 8,
+      "hp_grid_size": 2,
       "fair_val_period_weight": 5.0
     }
   ],

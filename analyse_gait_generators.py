@@ -39,7 +39,7 @@ Run with:
     python analyse_gait_generators.py --out figs_demo/gait_gen_review
 
     # include all 4 v2 variants as separate series
-    python analyse_gait_generators.py --out figs_demo/gait_gen_v2 --v2-variants  residual 
+    python analyse_gait_generators.py --out figs_demo/gait_gen_v2 --v2-variants  residual phase_residual phase
 
     # only the best v2 variant alongside baselines
     python analyse_gait_generators.py --out figs_demo/gait_gen_v2_best \\
@@ -70,7 +70,7 @@ from gait_generators.cubic_spline import CubicSplineGenerator
 # are added to this tuple at runtime based on --v2-variants.  Order dictates
 # legend order in the output plots.
 BASELINE_GENERATOR_NAMES: tuple[str, ...] = (
-    "fft_mlp", "fft_mlp_review", "fft_mlp_old", "raw_mocap", "cubic_spline", "cpg_matsuoka",
+    "GaitGen", "raw_mocap", "cubic_spline", "cpg_matsuoka",
 )
 VALID_V2_VARIANTS = ("baseline", "phase", "residual", "phase_residual")
 
@@ -168,15 +168,15 @@ def build_fair_generators(
     """
     gens: dict[str, object] = {}
 
-    # -- fft_mlp_review: already trained on train split by fft_datacreate_review.py
-    gens["fft_mlp_review"] = build_generator(
-        "fft_mlp_review", dt=1e-3, tile_repeats=1
-    )
-    gens["fft_mlp"] = build_generator(
-        "fft_mlp", dt=1e-3, tile_repeats=1
-    )
-    gens["fft_mlp_old"] = build_generator(
-        "fft_mlp_old", dt=1e-3, tile_repeats=1
+    # # -- fft_mlp_review: already trained on train split by fft_datacreate_review.py
+    # gens["fft_mlp_review"] = build_generator(
+    #     "fft_mlp_review", dt=1e-3, tile_repeats=1
+    # )
+    # gens["fft_mlp"] = build_generator(
+    #     "fft_mlp", dt=1e-3, tile_repeats=1
+    # )
+    gens["GaitGen"] = build_generator(
+        "GaitGen", dt=1e-3, tile_repeats=1
     )
     # -- raw_mocap: load full corpus, then filter in-place to train_idx
     raw = RawMocapGenerator(dt=1e-3, tile_repeats=1)

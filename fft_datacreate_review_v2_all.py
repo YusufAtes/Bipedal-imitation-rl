@@ -123,7 +123,7 @@ FAIR_VAL_PERIOD_WEIGHT = 5.0
 # Each point is trained to convergence; best (by val_fair) is kept.
 HP_GRID_FULL: list[dict] = [
     dict(hidden_size=hs, lr=lr, batch_size=bs)
-    for hs, lr, bs in product([256, 512], [3e-4, 1e-3], [32, 64])
+    for hs, lr, bs in product([512], [3e-4], [32, 64])
 ]
 
 # Single-point grid -- for smoke tests or when the user wants to skip HP

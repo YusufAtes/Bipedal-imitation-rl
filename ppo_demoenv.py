@@ -653,7 +653,7 @@ class BipedEnv(gym.Env):
         self.reference_speed = new_speed
 
 
-    def get_follow_camera_image(self, follow_distance=3.0, height=1.5,overlay_text=None):
+    def get_follow_camera_image(self, follow_distance=4.0, height=1.5,overlay_text=None):
         # Get torso link (index 2 in your URDF)
         torso_state = self.p.getLinkState(self.robot, 2, physicsClientId=self.physics_client)
         torso_pos = torso_state[0]  # (x,y,z) of torso CoM
