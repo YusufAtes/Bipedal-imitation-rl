@@ -1,0 +1,19 @@
+{
+ "pca_mlp": {
+  "val_vfair": 0.018849298357963562,
+  "epochs": 1164,
+  "params": 593024,
+  "basis_params": 16384,
+  "var_explained_first8": 0.9119725227355957,
+  "train_s": 49.45050597190857
+ },
+ "gru_seq": {
+  "val_vfair": 0.031906045973300934,
+  "epochs": 835,
+  "params": 14548,
+  "first_last_jump": 0.3064509332180023,
+  "gt_first_last_jump": 0.3002147972583771,
+  "train_s": 170.66090559959412
+ },
+ "fft_mlp_params_4joint": 597128
+}

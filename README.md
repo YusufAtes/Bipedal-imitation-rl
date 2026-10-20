@@ -69,3 +69,25 @@ Experiment outputs are saved under folders like `ppo_*`, `ppo_lstm/`, `ppo_newre
 This repository is provided for research and educational purposes. If you plan to publish results based on it, please cite accordingly and include a link back to this repository.
 
 
+
+### Reproducing the SIViP paper (revision branch `sivip-revision`)
+
+Python: the conda base interpreter (`C:\Users\<you>\anaconda3\python.exe` on the
+authors' machines). Run every command from the repository root.
+
+| Paper item | Command | Output |
+|---|---|---|
+| Six-joint cycles with subject IDs (Section 3) | `python fft_extract_cycles.py --out-dir "gait reference 6joint"` | `gait reference 6joint/*.npy`, `meta.json` |
+| Filter check, Section 3 numbers | `python analyse_cutoff.py` | `tables/cutoff_check.csv` |
+| Cycle-duration table (Table 2) | `python analyse_cycle_durations.py` | `tables/cycle_durations.{csv,tex}` |
+| Representation comparison (Table 3, Fig. 3) | `python analyse_gait_generators.py --out figs_demo/gait_gen_v2 --v2-variants residual` | `figs_demo/gait_gen_v2/summary.csv` |
+| PCA and GRU baselines | `python train_latent_baselines.py` then `python analyse_gait_generators.py --out figs_demo/gait_gen_latent --v2-variants residual --extra pca_mlp gru_seq` | `kfold_results/latent_baselines/`, `figs_demo/gait_gen_latent/` |
+| Representation ablation (cutoff, rate, bins) | `python ablate_representation.py` and `python ablate_representation.py K` | `kfold_results/ablation/*.csv` |
+| Subject-grouped split | `python train_gaitgen_subject.py` and `python train_gaitgen_subject.py --seeds 0 1 2 3 4 5 6 7` | `kfold_results/subject_split/` |
+| Closed-loop figure panels and Table 6 intervals | `python plot_paper_figures.py` | `sn-article-template/figs/fig_ramp_vel.pdf`, `tables/table5_ci.csv` |
+| Manuscript | `latexmk -pdf main.tex` inside `sn-article-template/` | `main.pdf` |
+
+The split indices behind Table 3 are `gait reference phase 2/split_indices.npz`
+(897 / 135 / 89 cycles, seed 42). PPO configurations are the YAML files under
+`configs/`; the per-episode demo logs used for Table 6 are under
+`configurations/<config>/<run>/` and `ppo_newreward/`.

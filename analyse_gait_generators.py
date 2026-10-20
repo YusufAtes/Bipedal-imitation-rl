@@ -478,6 +478,10 @@ def main() -> int:
              "Example: --v2-variants baseline phase residual phase_residual",
     )
     parser.add_argument(
+        "--extra", type=str, nargs="*", default=[],
+        help="Extra registered generators to add to the comparison, e.g. --extra pca_mlp gru_seq",
+    )
+    parser.add_argument(
         "--loso",
         action="store_true",
         help="Leave-one-subject-out (stub - requires re-parsing dataset/*/*.c3d).",
@@ -502,6 +506,8 @@ def main() -> int:
     # --- 2. generators restricted to train corpus
     v2_variants = tuple(args.v2_variants)
     generators = build_fair_generators(train_idx, v2_variants=v2_variants)
+    for name in args.extra:
+        generators[name] = build_generator(name, dt=1e-3, tile_repeats=1)
     # FINAL series list for the plots = whatever was actually instantiated,
     # preserving the order: baselines first, then v2 variants as provided.
     generator_names: tuple[str, ...] = tuple(generators.keys())
