@@ -90,6 +90,34 @@ def main() -> int:
         w.writerow(dict(kind="minus3dB_Hz", value=f3, all=f3))
         w.writerow(dict(kind="minus20dB_Hz", value=f20, all=f20))
     print(f"\nwrote {out / 'cutoff_check.csv'}")
+
+    # ---- Table 1 of the paper: loss of the whole chain against the raw 100 Hz cycle
+    # filter at 100 Hz -> crop cycle -> keep every 10th sample -> cubic spline back to 100 Hz
+    from scipy.interpolate import CubicSpline
+    chain_cutoffs = [2.0, 3.0, 4.0, 5.0, None]
+    acc = {c: np.zeros(6) for c in chain_cutoffs}
+    n_samples = 0
+    for _folder, _f, c3 in iter_trials():
+        q, s, e, *_ = trial_angles(c3)
+        raw = q[s:e]; L = len(raw); n_samples += L
+        for cut in chain_cutoffs:
+            d = lowpass(q, cut, FS, args.order)[s:e][::10]
+            up = CubicSpline(np.arange(len(d)) * 10, d, axis=0, extrapolate=True)(np.arange(L))
+            acc[cut] += ((up - raw) ** 2).sum(axis=0)
+    print("\nPreprocessing-chain loss vs raw 100 Hz cycles (filter, decimate to 10 Hz, cubic spline back):")
+    print(f"{'cutoff':>7} {'MSE[1e-4 rad^2]':>15} {'RMS[deg]':>9} {'hips':>6} {'knees':>6} {'ankles':>6}")
+    chain_rows = []
+    for cut in chain_cutoffs:
+        e6 = acc[cut]; mse = e6.sum() / (n_samples * 6)
+        grp = [np.degrees(np.sqrt(e6[[i, i + 3]].sum() / (2 * n_samples))) for i in range(3)]
+        chain_rows.append(dict(cutoff="none" if cut is None else cut, mse_1e4=1e4 * mse,
+                               rms_deg=np.degrees(np.sqrt(mse)), hips_deg=grp[0], knees_deg=grp[1], ankles_deg=grp[2]))
+        print(f"{str(chain_rows[-1]['cutoff']):>7} {1e4*mse:15.2f} {np.degrees(np.sqrt(mse)):9.2f} "
+              + " ".join(f"{g:6.2f}" for g in grp))
+    with (out / "preprocessing_loss.csv").open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(chain_rows[0].keys()))
+        w.writeheader(); w.writerows(chain_rows)
+    print(f"wrote {out / 'preprocessing_loss.csv'}")
     return 0
 
 
